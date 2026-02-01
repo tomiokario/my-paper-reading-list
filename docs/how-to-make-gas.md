@@ -47,6 +47,7 @@ GASからGitHub APIを操作するためのトークンを取得する。
 
 ### 2-2. スクリプトのデプロイ
 ソースコードは以下のリポジトリを参照し、GASプロジェクトの `Code.gs` に反映させる。
+* [my-paper-reading-list/scripts/code.gs](https://github.com/tomiokario/my-paper-reading-list/blob/main/scripts/code.gs)
 
 このスクリプトは以下の処理を行う。
 1.  指定ラベルの未読メールを検索・解析。
