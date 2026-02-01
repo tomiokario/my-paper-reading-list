@@ -1,16 +1,17 @@
-# Google ScholarのアラートをGitHub Projectsでカンバン管理する自動化システム
+# Google ScholarアラートをGitHub Projectsでカンバン管理する
 
 Google Scholarからの論文アラートメールを自動的に解析し、GitHub Issueとして起票した上で、GitHub Projects (V2) のカンバンボードでステータス管理を行うシステムについてまとめる。
 
-従来の[スプレッドシートによるリスト管理（Cosense）](https://scrapbox.io/tomiokario/Gmail%E4%B8%8A%E3%81%A7%E3%83%A9%E3%83%99%E3%83%AB%E5%88%86%E3%81%91%E3%81%95%E3%82%8C%E3%81%9FScholar%E3%82%A2%E3%83%A9%E3%83%BC%E3%83%88%E3%81%8B%E3%82%89%E6%96%87%E7%8C%AE%E3%83%AA%E3%82%B9%E3%83%88%E3%82%92%E7%94%9F%E6%88%90%E3%81%99%E3%82%8BGoogle_Apps_Script%EF%BC%88%E8%A9%A6%E4%BD%9C%EF%BC%89)）から、視覚的なステータス管理がしやすいGitHub Projectsへ移行したものである。
+> ※ 以前の方法：[スプレッドシートによるリスト管理（Cosense）](https://scrapbox.io/tomiokario/Gmail%E4%B8%8A%E3%81%A7%E3%83%A9%E3%83%99%E3%83%AB%E5%88%86%E3%81%91%E3%81%95%E3%82%8C%E3%81%9FScholar%E3%82%A2%E3%83%A9%E3%83%BC%E3%83%88%E3%81%8B%E3%82%89%E6%96%87%E7%8C%AE%E3%83%AA%E3%82%B9%E3%83%88%E3%82%92%E7%94%9F%E6%88%90%E3%81%99%E3%82%8BGoogle_Apps_Script%EF%BC%88%E8%A9%A6%E4%BD%9C%EF%BC%89)
 
-## 前提条件：Gmail側の設定
+---
+
+## 事前準備：Gmail側の設定
 
 本システムは、Gmail上でScholarアラートが既にラベル振り分けされていることを前提としている。
 まだ設定していない場合は、以下の記事を参照してフィルタとラベルの設定を行うこと。
 
-> **[GmailでGoogle ScholarのAlertを作者別に自動ラベル振り分けする（Cosense）](https://scrapbox.io/tomiokario/Gmail%E3%81%A7Google_Scholar%E3%81%AEAlert%E3%82%92%E4%BD%9C%E8%80%85%E5%88%A5%E3%81%AB%E8%87%AA%E5%8B%95%E3%83%A9%E3%83%99%E3%83%AB%E6%8C%AF%E3%82%8A%E5%88%86%E3%81%91%E3%81%99%E3%82%8B)**
-> 特定のキーワードや著者名ごとにラベル（例: `Scholar/AuthorName` 等）が付与される状態にしておく必要がある。
+* **[GmailでGoogle ScholarのAlertを作者別に自動ラベル振り分けする（Cosense）](https://scrapbox.io/tomiokario/Gmail%E3%81%A7Google_Scholar%E3%81%AEAlert%E3%82%92%E4%BD%9C%E8%80%85%E5%88%A5%E3%81%AB%E8%87%AA%E5%8B%95%E3%83%A9%E3%83%99%E3%83%AB%E6%8C%AF%E3%82%8A%E5%88%86%E3%81%91%E3%81%99%E3%82%8B)**
 
 ---
 
@@ -46,8 +47,6 @@ GASからGitHub APIを操作するためのトークンを取得する。
 
 ### 2-2. スクリプトのデプロイ
 ソースコードは以下のリポジトリを参照し、GASプロジェクトの `Code.gs` に反映させる。
-
-> [GitHubリポジトリへのリンクをここに貼る]
 
 このスクリプトは以下の処理を行う。
 1.  指定ラベルの未読メールを検索・解析。
