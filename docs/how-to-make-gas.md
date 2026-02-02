@@ -19,8 +19,8 @@ Google Scholarからの論文アラートメールを自動的に解析し、Git
 
 ### 1-1. リポジトリとProjectの作成
 1.  **Repository**: 論文管理用のリポジトリを作成する（Private推奨）。
-2.  **Project (V2)**: 「Board」テンプレートで作成し、上記リポジトリとリンクさせる。
-    * *自動追加設定*: ProjectのWorkflows設定で「Auto-add to project」が有効になっていることを確認する（通常、リポジトリをリンクさせれば自動設定される）。
+2.  **Project (V2)**: リポジトリからプロジェクトを作成してリンクさせる。
+    * リポジトリのissueを自動追加するワークフローが自動設定される
 
 ### 1-2. Access Tokenの発行
 GASからGitHub APIを操作するためのトークンを取得する。
@@ -47,7 +47,7 @@ GASからGitHub APIを操作するためのトークンを取得する。
 
 ### 2-2. スクリプトのデプロイ
 ソースコードは以下のリポジトリを参照し、GASプロジェクトの `Code.gs` に反映させる。
-* [my-paper-reading-list/scripts/code.gs](https://github.com/tomiokario/my-paper-reading-list/blob/main/scripts/code.gs)
+* [my-paper-reading-list/scripts/code.gs](../scripts/code.gs)
 
 このスクリプトは以下の処理を行う。
 1.  指定ラベルの未読メールを検索・解析。
