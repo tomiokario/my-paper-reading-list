@@ -1,5 +1,9 @@
+import argparse
+import io
 import unittest
+from unittest.mock import patch
 
+import scripts.paper_worker as paper_worker
 from scripts.paper_worker import normalize_github_issue_url, resolve_notion_issue_page
 
 
@@ -59,6 +63,55 @@ class GitHubIssueResolutionTests(unittest.TestCase):
 
         self.assertIsNone(page)
         self.assertEqual(reason, "duplicate_url")
+
+
+class NotionQueryTests(unittest.TestCase):
+    def test_query_database_clamps_page_size_to_notion_limit(self):
+        calls = []
+
+        def fake_notion_request(method, path, payload):
+            calls.append(payload.copy())
+            return {"results": [], "has_more": False}
+
+        with (
+            patch.object(paper_worker, "require_env", return_value="database-id"),
+            patch.object(paper_worker, "notion_request", side_effect=fake_notion_request),
+        ):
+            paper_worker.query_database(page_size=500)
+
+        self.assertEqual(calls[0]["page_size"], 100)
+
+    def test_query_database_uses_smaller_max_results_for_first_page(self):
+        calls = []
+
+        def fake_notion_request(method, path, payload):
+            calls.append(payload.copy())
+            return {"results": [], "has_more": False}
+
+        with (
+            patch.object(paper_worker, "require_env", return_value="database-id"),
+            patch.object(paper_worker, "notion_request", side_effect=fake_notion_request),
+        ):
+            paper_worker.query_database(page_size=500, max_results=10)
+
+        self.assertEqual(calls[0]["page_size"], 10)
+
+
+class PrepareCommandTests(unittest.TestCase):
+    def test_keep_going_still_returns_failure_after_any_failed_item(self):
+        pages = [notion_page(1), notion_page(2)]
+        args = argparse.Namespace(limit=2, dry_run=False, skip_download=False, keep_going=True)
+
+        with (
+            patch.object(paper_worker, "query_database", return_value=pages),
+            patch.object(paper_worker, "prepare_page", side_effect=[RuntimeError("boom"), "prepared"]) as prepare_page,
+            patch("sys.stdout", new_callable=io.StringIO),
+            patch("sys.stderr", new_callable=io.StringIO),
+        ):
+            exit_code = paper_worker.command_prepare(args)
+
+        self.assertEqual(exit_code, 1)
+        self.assertEqual(prepare_page.call_count, 2)
 
 
 if __name__ == "__main__":

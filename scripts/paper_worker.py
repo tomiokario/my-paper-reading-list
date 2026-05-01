@@ -118,7 +118,10 @@ def query_database(
     if max_results is not None and max_results <= 0:
         return []
 
-    payload: dict[str, Any] = {"page_size": page_size if max_results is None else min(page_size, max_results)}
+    capped_page_size = min(max(page_size, 1), 100)
+    payload: dict[str, Any] = {
+        "page_size": capped_page_size if max_results is None else min(capped_page_size, max_results)
+    }
     if filter_payload:
         payload["filter"] = filter_payload
 
@@ -132,7 +135,7 @@ def query_database(
             break
         payload["start_cursor"] = data["next_cursor"]
         if max_results is not None:
-            payload["page_size"] = min(page_size, max_results - len(pages))
+            payload["page_size"] = min(capped_page_size, max_results - len(pages))
     return pages
 
 
@@ -456,20 +459,22 @@ def prepare_page(page: dict[str, Any], dry_run: bool = False, skip_download: boo
 def command_prepare(args: argparse.Namespace) -> int:
     pages = query_database(
         {"property": "Status", "select": {"equals": "Want to read"}},
-        page_size=args.limit,
+        page_size=min(args.limit, 100),
         max_results=args.limit,
     )
     if not pages:
         print("No papers with Status = Want to read.")
         return 0
+    failures = 0
     for page in pages[: args.limit]:
         try:
             print(prepare_page(page, dry_run=args.dry_run, skip_download=args.skip_download))
         except Exception as exc:
             print(f"failed: {get_title(page) or page['id']}: {exc}", file=sys.stderr)
+            failures += 1
             if not args.keep_going:
                 return 1
-    return 0
+    return 1 if failures else 0
 
 
 def command_status(args: argparse.Namespace) -> int:
