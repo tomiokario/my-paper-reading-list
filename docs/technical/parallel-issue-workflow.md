@@ -26,10 +26,16 @@ This section is the current source of truth for issue-to-PR operation in this re
    - If either review finds a blocker, fix it and rerun the relevant review first.
 7. Open or update the PR
    - Include validation results and review status in the PR body.
+   - Write the PR title and body in Japanese.
    - GitHub Codex review is then used as an external safety net, not as the first serious review.
-8. Address PR review comments
+8. Run GitHub Codex review to a positive result
+   - After opening or updating the PR, request GitHub Codex review.
+   - Continue the PR work until Codex gives a positive result: a `+1` / thumbs-up reaction, or a Codex review/comment that says it did not find major issues.
+   - Do not treat PR creation alone as completion while Codex review is still pending.
+9. Address PR review comments
    - For each actionable comment, react and reply after fixing or explaining.
    - Even when addressing Codex review comments, also run the local multi-agent review for the new diff before committing/pushing.
+   - After fixes are pushed, request GitHub Codex review again and repeat until the positive result is reached.
 
 Completion criteria for a worker thread:
 
@@ -41,6 +47,8 @@ Completion criteria for a worker thread:
 - commit is created
 - branch is pushed
 - PR is created or updated with validation and review evidence
+- PR title and body are written in Japanese
+- GitHub Codex review has reached `+1` / no-major-issues, or the blocker to completing that check is documented
 
 # Parallel Issue Workflow
 
