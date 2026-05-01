@@ -24,3 +24,14 @@ instructions = """
 - open_questions_or_assumptions
 - status
 """
+
+[pre_pr_gate]
+purpose = "Run after intent review and before commit / push / PR."
+required_answer = "State clearly whether the diff is ready for commit / push / PR."
+blocker_policy = "If there is any blocker, return not ready and list the exact reason."
+inputs = [
+  "current diff",
+  "relevant docs and tests",
+  "validation results",
+  "public/private data boundary",
+]

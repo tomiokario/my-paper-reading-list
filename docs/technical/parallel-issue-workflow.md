@@ -1,3 +1,47 @@
+
+## Current Operating Flow
+
+This section is the current source of truth for issue-to-PR operation in this repository.
+
+1. Clarify intent
+   - Read the user request, issue body, related comments, and existing repository rules.
+   - Write down the intended outcome, acceptance criteria, files likely to change, and validation profile.
+2. Update operating rules first when the process changes
+   - If the user changes the development process, review order, storage policy, or agent workflow, update the canonical operating files first.
+   - Treat `AGENTS.md`, this document, and `.codex/agents/*` as the source of truth before applying the new process to the current code change.
+   - After updating the operating files, apply the new rule to the current task and review the combined diff.
+3. Implement locally
+   - Work in the assigned branch/worktree.
+   - Keep public workflow code separate from private data.
+   - Run focused validation for the changed area.
+4. Run intent review
+   - Use an intent reviewer that checks the implementation against the user's actual goal and conversation context.
+   - Fix any mismatch before moving on.
+5. Run fresh pre PR review
+   - Use a fresh reviewer that did not implement the change.
+   - Input only the current diff, relevant docs/tests, validation results, and public/private boundary.
+   - The reviewer must answer whether the change is ready for commit / push / PR.
+6. Commit and push only after both reviews pass
+   - Do not create or update a PR before the intent review and fresh pre PR review pass.
+   - If either review finds a blocker, fix it and rerun the relevant review first.
+7. Open or update the PR
+   - Include validation results and review status in the PR body.
+   - GitHub Codex review is then used as an external safety net, not as the first serious review.
+8. Address PR review comments
+   - For each actionable comment, react and reply after fixing or explaining.
+   - Even when addressing Codex review comments, also run the local multi-agent review for the new diff before committing/pushing.
+
+Completion criteria for a worker thread:
+
+- implementation is complete
+- validation profile checks are complete
+- public/private data boundary is checked
+- intent review passed
+- fresh pre PR review passed
+- commit is created
+- branch is pushed
+- PR is created or updated with validation and review evidence
+
 # Parallel Issue Workflow
 
 このドキュメントは、この repository で複数の GitHub Issue を並列に進めるときの運用をまとめる。
@@ -68,6 +112,8 @@ public/private data 境界、Notion schema、CLI、翻訳 pipeline など、同�
 - validation profile に沿う確認が完了している
 - public/private data 境界を確認している
 - `git status` に意図しない差分がない
+- intent review が通過している
+- fresh pre PR review が通過している
 - commit 済み
 - push 済み
 - Pull Request 作成済み

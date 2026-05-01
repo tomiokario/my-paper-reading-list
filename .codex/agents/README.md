@@ -1,3 +1,19 @@
+
+## Pre PR Review Gate
+
+When the user changes the process itself, update the operating files first, then apply the new process to the current task. Do not commit / push / PR until the updated process has been applied and reviewed.
+
+Use these local agents before commit / push / PR:
+
+1. `intent-review-agent`
+   - Confirms the diff matches the user's actual intent and acceptance criteria.
+2. `fresh-review-agent`
+   - Runs after intent review.
+   - Reviews the current diff with fresh eyes and decides whether it is ready for commit / push / PR.
+
+Do not open or update a PR until both reviews pass.
+When a PR review comment is addressed later, rerun the local review for the new diff before commit / push.
+
 # Repo Local Agent Definitions
 
 このディレクトリには、この repository の Issue 対応で使う役割分担を再利用できるようにするための定義を置きます。

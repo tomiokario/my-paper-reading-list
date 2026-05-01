@@ -61,8 +61,7 @@ def load_dotenv(path: Path) -> None:
         key, value = line.split("=", 1)
         key = key.strip()
         value = value.strip().strip('"').strip("'")
-        if value:
-            os.environ[key] = value
+        os.environ[key] = value
 
 
 def require_env(name: str) -> str:
@@ -498,6 +497,19 @@ def prepare_page(page: dict[str, Any], dry_run: bool = False, skip_download: boo
             return f"prepared without PDF: {title} -> {target_dir}"
 
         pdf_path = target_dir / "paper.pdf"
+        if skip_download and not pdf_path.exists():
+            update_page(
+                page_id,
+                {
+                    "Status": status_value("Want to read", page),
+                    "Local Folder": rich_text(str(target_dir)),
+                    "Process Tags": multi_select(["pdf_download_skipped"]),
+                    "Error Message": rich_text(""),
+                    "Last Processed": date_value(dt.datetime.now(dt.timezone.utc)),
+                },
+            )
+            return f"prepared without downloaded PDF: {title} -> {target_dir}"
+
         if not skip_download and not pdf_path.exists():
             download_pdf(pdf_url, pdf_path)
 

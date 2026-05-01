@@ -3,7 +3,7 @@ import io
 import os
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import scripts.paper_worker as paper_worker
 from scripts.paper_worker import normalize_github_issue_url, resolve_notion_issue_page
@@ -78,6 +78,18 @@ class GitHubIssueResolutionTests(unittest.TestCase):
 
         self.assertIsNone(page)
         self.assertEqual(reason, "duplicate_url")
+
+
+class DotenvTests(unittest.TestCase):
+    def test_empty_dotenv_assignment_clears_existing_environment_value(self):
+        env_path = Mock()
+        env_path.exists.return_value = True
+        env_path.read_text.return_value = "GITHUB_REPOSITORY=\n"
+
+        with patch.dict(os.environ, {"GITHUB_REPOSITORY": "stale/repo"}):
+            paper_worker.load_dotenv(env_path)
+
+            self.assertEqual(os.environ["GITHUB_REPOSITORY"], "")
 
 
 class NotionQueryTests(unittest.TestCase):
@@ -233,6 +245,35 @@ class PreparePageTests(unittest.TestCase):
         self.assertEqual(
             final_properties["Process Tags"],
             {"multi_select": [{"name": "pdf_missing"}, {"name": "needs_manual_check"}]},
+        )
+        self.assertEqual(final_properties["Error Message"], {"rich_text": []})
+
+    def test_prepare_skip_download_keeps_item_retryable_when_pdf_is_missing(self):
+        page = {
+            **notion_page(1, status="Want to read"),
+            "properties": {
+                **notion_page(1, status="Want to read")["properties"],
+                "PDF URL": {"type": "url", "url": "https://example.com/paper.pdf"},
+            },
+        }
+        target_dir = Path("paper-dir")
+
+        with (
+            patch.object(paper_worker, "paper_dir_for", return_value=target_dir),
+            patch.object(paper_worker, "write_initial_files") as write_initial_files,
+            patch.object(paper_worker, "download_pdf") as download_pdf,
+            patch.object(paper_worker, "update_page") as update_page,
+        ):
+            result = paper_worker.prepare_page(page, dry_run=False, skip_download=True)
+
+        self.assertIn("prepared without downloaded PDF", result)
+        write_initial_files.assert_called_once_with(page, target_dir)
+        download_pdf.assert_not_called()
+        final_properties = update_page.call_args_list[-1].args[1]
+        self.assertEqual(final_properties["Status"], {"select": {"name": "Want to read"}})
+        self.assertEqual(
+            final_properties["Process Tags"],
+            {"multi_select": [{"name": "pdf_download_skipped"}]},
         )
         self.assertEqual(final_properties["Error Message"], {"rich_text": []})
 
