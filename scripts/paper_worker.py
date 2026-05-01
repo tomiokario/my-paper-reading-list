@@ -741,8 +741,8 @@ def github_project_items(owner: str, project_number: int, limit: int) -> list[di
 
     if completed.returncode != 0:
         detail = (completed.stderr or completed.stdout).strip()
-        if "read:project" in detail:
-            detail += "\nRun: gh auth refresh -s read:project"
+        if "project" in detail.lower():
+            detail += "\nRun: gh auth refresh -s project"
         raise PaperWorkerError(f"GitHub Project item-list failed: {detail}")
 
     data = json.loads(completed.stdout)

@@ -78,7 +78,7 @@ python scripts\paper_worker.py import-github-issues --repo owner/repository
 Sync GitHub Projects status and priority into the imported Notion cards:
 
 ```powershell
-gh auth refresh -s read:project
+gh auth refresh -s project
 python scripts\paper_worker.py sync-github-project --owner owner --project-number 2 --dry-run
 python scripts\paper_worker.py sync-github-project --owner owner --project-number 2
 ```
@@ -86,6 +86,6 @@ python scripts\paper_worker.py sync-github-project --owner owner --project-numbe
 ## Notes
 
 - The CLI currently creates the local folder, `metadata.json`, `notes.md`, and downloads `paper.pdf` when `PDF URL` is present.
-- GitHub Projects sync uses the GitHub CLI, so `gh` must be installed and authenticated with `read:project`.
+- GitHub Projects sync uses the GitHub CLI, so `gh` must be installed and authenticated with `project`.
 - Full text extraction and translation are planned next.
 - Notion IDs and tokens must stay in `.env` or another local-only configuration file.
