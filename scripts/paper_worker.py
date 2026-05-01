@@ -125,12 +125,80 @@ def query_database(filter_payload: dict[str, Any] | None = None, page_size: int 
     return pages
 
 
-def find_page_by_number(issue_number: int) -> dict[str, Any] | None:
-    pages = query_database(
-        {"property": "GitHub Issue Number", "number": {"equals": issue_number}},
-        page_size=1,
-    )
-    return pages[0] if pages else None
+def normalize_github_issue_url(value: str) -> str:
+    stripped = (value or "").strip().rstrip("/")
+    parsed = urllib.parse.urlparse(stripped)
+    host = parsed.netloc.lower()
+    if host.startswith("www."):
+        host = host[4:]
+    parts = [part for part in parsed.path.split("/") if part]
+    if host == "github.com" and len(parts) >= 4 and parts[2].lower() == "issues":
+        return f"https://github.com/{parts[0].lower()}/{parts[1].lower()}/issues/{parts[3]}"
+    return stripped
+
+
+def github_issue_url(repo: str, issue_number: int) -> str:
+    return normalize_github_issue_url(f"https://github.com/{repo}/issues/{issue_number}")
+
+
+def repo_from_github_issue_url(value: str) -> str:
+    parsed = urllib.parse.urlparse(normalize_github_issue_url(value))
+    parts = [part for part in parsed.path.split("/") if part]
+    if parsed.netloc.lower() != "github.com" or len(parts) < 4 or parts[2] != "issues":
+        return ""
+    return f"{parts[0]}/{parts[1]}"
+
+
+def notion_issue_indexes() -> tuple[dict[str, dict[str, Any]], dict[int, list[dict[str, Any]]]]:
+    pages = query_database(page_size=100)
+    by_url: dict[str, dict[str, Any]] = {}
+    by_number: dict[int, list[dict[str, Any]]] = {}
+    for page in pages:
+        issue_url = normalize_github_issue_url(get_text(page, "GitHub Issue URL"))
+        if issue_url:
+            by_url[issue_url] = page
+        value = get_number(page, "GitHub Issue Number")
+        if isinstance(value, (int, float)):
+            by_number.setdefault(int(value), []).append(page)
+    return by_url, by_number
+
+
+def resolve_notion_issue_page(
+    indexes: tuple[dict[str, dict[str, Any]], dict[int, list[dict[str, Any]]]],
+    repo: str,
+    issue_number: int,
+    issue_url: str = "",
+) -> tuple[dict[str, Any] | None, str]:
+    by_url, by_number = indexes
+    candidate_urls = [issue_url, github_issue_url(repo, issue_number)]
+    seen_urls: set[str] = set()
+    for candidate_url in candidate_urls:
+        normalized = normalize_github_issue_url(candidate_url)
+        if not normalized or normalized in seen_urls:
+            continue
+        seen_urls.add(normalized)
+        page = by_url.get(normalized)
+        if page:
+            return page, "url"
+
+    candidates = by_number.get(issue_number, [])
+    repo_matches = [
+        page
+        for page in candidates
+        if repo_from_github_issue_url(get_text(page, "GitHub Issue URL")) == repo.lower()
+    ]
+    if len(repo_matches) == 1:
+        return repo_matches[0], "repo_url"
+    if repo and len(candidates) == 1 and not get_text(candidates[0], "GitHub Issue URL"):
+        return candidates[0], "number_missing_url"
+    if candidates:
+        return None, "ambiguous_number"
+    return None, "missing"
+
+
+def find_page_by_issue(repo: str, issue_number: int, issue_url: str = "") -> dict[str, Any] | None:
+    page, _ = resolve_notion_issue_page(notion_issue_indexes(), repo, issue_number, issue_url)
+    return page
 
 
 def rich_text(value: str) -> dict[str, Any]:
@@ -478,7 +546,7 @@ def pdf_url_from(source_url: str, oa_url: str) -> str:
     return ""
 
 
-def paper_key_from_issue(issue: dict[str, Any], meta: dict[str, Any]) -> str:
+def paper_key_from_issue(repo: str, issue: dict[str, Any], meta: dict[str, Any]) -> str:
     source_url = first_url(meta.get("Source URL", ""))
     oa_url = first_url(meta.get("OA URL", ""))
     doi = extract_doi(source_url, oa_url)
@@ -487,10 +555,10 @@ def paper_key_from_issue(issue: dict[str, Any], meta: dict[str, Any]) -> str:
         return "doi-" + slugify(doi)
     if arxiv:
         return "arxiv-" + slugify(arxiv)
-    return f"github-issue-{issue['number']}"
+    return f"github-{slugify(repo)}-issue-{issue['number']}"
 
 
-def issue_to_properties(issue: dict[str, Any]) -> dict[str, Any]:
+def issue_to_properties(repo: str, issue: dict[str, Any]) -> dict[str, Any]:
     body = issue.get("body") or ""
     meta = parse_issue_body(body)
     source_url = first_url(meta.get("Source URL", ""))
@@ -510,14 +578,14 @@ def issue_to_properties(issue: dict[str, Any]) -> dict[str, Any]:
         "GitHub Issue Number": number_value(issue["number"]),
         "GitHub Issue URL": url_value(issue.get("html_url", "")),
         "Original Issue State": select((issue.get("state") or "").upper()),
-        "Paper Key": rich_text(paper_key_from_issue(issue, meta)),
+        "Paper Key": rich_text(paper_key_from_issue(repo, issue, meta)),
         "Authors": rich_text(meta.get("Authors", "")),
         "Venue": rich_text(meta.get("Venue", "")),
         "Source": rich_text(meta.get("Label", "github-issues")),
         "Source URL": url_value(source_url),
         "PDF URL": url_value(pdf_url_from(source_url, oa_url)),
         "Short Summary JA": rich_text(meta.get("Summary JA", "")),
-        "Reason": rich_text(f"Imported from GitHub issue #{issue['number']}"),
+        "Reason": rich_text(f"Imported from GitHub issue {repo}#{issue['number']}"),
         "Tags": multi_select(labels[:20]),
         "OA Status": select(oa_status),
     }
@@ -551,13 +619,32 @@ def github_issues(repo: str, limit: int) -> list[dict[str, Any]]:
 def command_import_github_issues(args: argparse.Namespace) -> int:
     repo = args.repo or os.environ.get("GITHUB_REPOSITORY", "tomiokario/my-paper-reading-list")
     issues = github_issues(repo, args.limit)
+    indexes = notion_issue_indexes()
     created = 0
     skipped = 0
+    backfilled = 0
+    ambiguous = 0
     for issue in issues:
-        if find_page_by_number(issue["number"]):
+        issue_url = normalize_github_issue_url(issue.get("html_url", "") or github_issue_url(repo, issue["number"]))
+        page, match_reason = resolve_notion_issue_page(indexes, repo, issue["number"], issue_url)
+        if page:
+            if match_reason == "number_missing_url":
+                if args.dry_run:
+                    print(f"would backfill issue URL for #{issue['number']}: {issue_url}")
+                else:
+                    update_page(page["id"], {"GitHub Issue URL": url_value(issue_url)})
+                backfilled += 1
             skipped += 1
             continue
-        properties = issue_to_properties(issue)
+        if match_reason == "ambiguous_number":
+            print(
+                f"skipped ambiguous issue #{issue['number']} from {repo}; add GitHub Issue URL to the existing card",
+                file=sys.stderr,
+            )
+            ambiguous += 1
+            skipped += 1
+            continue
+        properties = issue_to_properties(repo, issue)
         if args.dry_run:
             print(f"would import #{issue['number']}: {issue['title']}")
             created += 1
@@ -565,7 +652,8 @@ def command_import_github_issues(args: argparse.Namespace) -> int:
         create_page(properties)
         print(f"imported #{issue['number']}: {issue['title']}")
         created += 1
-    print(f"done: imported={created} skipped={skipped}")
+    action = "would_import" if args.dry_run else "imported"
+    print(f"done: {action}={created} skipped={skipped} backfilled={backfilled} ambiguous={ambiguous}")
     return 0
 
 
@@ -575,6 +663,28 @@ def issue_number_from_project_item(item: dict[str, Any]) -> int | None:
         return None
     number = content.get("number")
     return number if isinstance(number, int) else None
+
+
+def project_item_issue_url(item: dict[str, Any]) -> str:
+    content = item.get("content")
+    if isinstance(content, dict):
+        url = normalize_github_issue_url(str(content.get("url") or ""))
+        if url:
+            return url
+        repository = str(content.get("repository") or "")
+        number = issue_number_from_project_item(item)
+        if repository and number is not None:
+            return github_issue_url(repository, number)
+
+    repository_url = str(item.get("repository") or "")
+    repo = ""
+    if repository_url:
+        parsed = urllib.parse.urlparse(repository_url)
+        parts = [part for part in parsed.path.split("/") if part]
+        if parsed.netloc.lower() == "github.com" and len(parts) >= 2:
+            repo = f"{parts[0]}/{parts[1]}"
+    number = issue_number_from_project_item(item)
+    return github_issue_url(repo, number) if repo and number is not None else ""
 
 
 def project_item_title(item: dict[str, Any]) -> str:
@@ -587,14 +697,9 @@ def project_item_title(item: dict[str, Any]) -> str:
     return f"issue #{number}" if number is not None else "project item"
 
 
-def notion_pages_by_issue_number() -> dict[int, dict[str, Any]]:
-    pages = query_database(page_size=100)
-    indexed: dict[int, dict[str, Any]] = {}
-    for page in pages:
-        value = get_number(page, "GitHub Issue Number")
-        if isinstance(value, (int, float)):
-            indexed[int(value)] = page
-    return indexed
+def notion_pages_by_issue_url() -> dict[str, dict[str, Any]]:
+    by_url, _ = notion_issue_indexes()
+    return by_url
 
 
 def github_project_items(owner: str, project_number: int, limit: int) -> list[dict[str, Any]]:
@@ -660,10 +765,11 @@ def command_sync_github_project(args: argparse.Namespace) -> int:
     owner = args.owner or os.environ.get("GITHUB_PROJECT_OWNER", "tomiokario")
     project_number = args.project_number or int(os.environ.get("GITHUB_PROJECT_NUMBER", "2"))
     items = github_project_items(owner, project_number, args.limit)
-    pages = notion_pages_by_issue_number()
+    indexes = notion_issue_indexes()
     updated = 0
     skipped = 0
     missing = 0
+    ambiguous = 0
 
     for item in items:
         issue_number = issue_number_from_project_item(item)
@@ -671,13 +777,25 @@ def command_sync_github_project(args: argparse.Namespace) -> int:
             skipped += 1
             continue
 
-        page = pages.get(issue_number)
+        issue_url = project_item_issue_url(item)
+        repo = repo_from_github_issue_url(issue_url)
+        page, match_reason = resolve_notion_issue_page(indexes, repo, issue_number, issue_url)
         if not page:
+            if match_reason == "ambiguous_number":
+                ambiguous += 1
+                print(
+                    f"ambiguous Notion card for issue #{issue_number} ({issue_url}): {project_item_title(item)}",
+                    file=sys.stderr,
+                )
+                skipped += 1
+                continue
             missing += 1
-            print(f"missing Notion card for issue #{issue_number}: {project_item_title(item)}")
+            print(f"missing Notion card for issue #{issue_number} ({issue_url}): {project_item_title(item)}")
             continue
 
         properties = project_item_update_properties(item, page, args.force_status)
+        if match_reason == "number_missing_url" and issue_url:
+            properties["GitHub Issue URL"] = url_value(issue_url)
         if not properties:
             skipped += 1
             continue
@@ -691,7 +809,7 @@ def command_sync_github_project(args: argparse.Namespace) -> int:
         updated += 1
 
     action = "would_update" if args.dry_run else "updated"
-    print(f"done: {action}={updated} skipped={skipped} missing={missing}")
+    print(f"done: {action}={updated} skipped={skipped} missing={missing} ambiguous={ambiguous}")
     return 0
 
 
