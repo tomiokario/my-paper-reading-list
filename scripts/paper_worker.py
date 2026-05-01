@@ -26,6 +26,7 @@ from typing import Any
 
 
 NOTION_VERSION = os.environ.get("NOTION_VERSION", "2022-06-28")
+DEFAULT_GITHUB_REPOSITORY = "tomiokario/my-paper-reading-list"
 DATABASE_PROPERTY_TYPES: dict[str, str] | None = None
 
 PROJECT_STATUS_MAP = {
@@ -74,6 +75,14 @@ def require_env(name: str) -> str:
 def env_or_default(name: str, default: str) -> str:
     value = os.environ.get(name, "").strip()
     return value or default
+
+
+def normalize_github_repo(value: str) -> str:
+    return (value or "").strip().lower()
+
+
+def default_github_repository() -> str:
+    return env_or_default("GITHUB_REPOSITORY", DEFAULT_GITHUB_REPOSITORY)
 
 
 def env_int_or_default(name: str, default: int) -> int:
@@ -214,6 +223,7 @@ def resolve_notion_issue_page(
     repo: str,
     issue_number: int,
     issue_url: str = "",
+    legacy_number_repo: str = "",
 ) -> tuple[dict[str, Any] | None, str]:
     by_url, by_number = indexes
     candidate_urls = [issue_url, github_issue_url(repo, issue_number)]
@@ -239,13 +249,17 @@ def resolve_notion_issue_page(
         ]
     if len(repo_matches) == 1:
         return repo_matches[0], "repo_url"
+    if len(candidates) == 1 and repo and normalize_github_repo(repo) == normalize_github_repo(legacy_number_repo):
+        candidate = candidates[0]
+        if not normalize_github_issue_url(get_text(candidate, "GitHub Issue URL")):
+            return candidate, "number"
     if candidates:
         return None, "ambiguous_number"
     return None, "missing"
 
 
 def find_page_by_issue(repo: str, issue_number: int, issue_url: str = "") -> dict[str, Any] | None:
-    page, _ = resolve_notion_issue_page(notion_issue_indexes(), repo, issue_number, issue_url)
+    page, _ = resolve_notion_issue_page(notion_issue_indexes(), repo, issue_number, issue_url, default_github_repository())
     return page
 
 
@@ -733,7 +747,9 @@ def github_issues(repo: str, limit: int) -> list[dict[str, Any]]:
 
 
 def command_import_github_issues(args: argparse.Namespace) -> int:
-    repo = args.repo or env_or_default("GITHUB_REPOSITORY", "tomiokario/my-paper-reading-list")
+    default_repo = default_github_repository()
+    repo = args.repo or default_repo
+    legacy_number_repo = default_repo if normalize_github_repo(repo) == normalize_github_repo(default_repo) else ""
     issues = github_issues(repo, args.limit)
     indexes = notion_issue_indexes()
     created = 0
@@ -742,8 +758,16 @@ def command_import_github_issues(args: argparse.Namespace) -> int:
     ambiguous = 0
     for issue in issues:
         issue_url = normalize_github_issue_url(issue.get("html_url", "") or github_issue_url(repo, issue["number"]))
-        page, match_reason = resolve_notion_issue_page(indexes, repo, issue["number"], issue_url)
+        page, match_reason = resolve_notion_issue_page(indexes, repo, issue["number"], issue_url, legacy_number_repo)
         if page:
+            if match_reason == "number" and issue_url:
+                properties = {"GitHub Issue URL": url_value(issue_url)}
+                if args.dry_run:
+                    print(f"would backfill issue #{issue['number']}: GitHub Issue URL")
+                else:
+                    update_page(page["id"], properties)
+                    print(f"backfilled issue #{issue['number']}: GitHub Issue URL")
+                backfilled += 1
             skipped += 1
             continue
         if match_reason in {"ambiguous_number", "duplicate_url"}:
@@ -876,6 +900,7 @@ def command_sync_github_project(args: argparse.Namespace) -> int:
     project_number = args.project_number or env_int_or_default("GITHUB_PROJECT_NUMBER", 2)
     items = github_project_items(owner, project_number, args.limit)
     indexes = notion_issue_indexes()
+    legacy_number_repo = default_github_repository()
     updated = 0
     skipped = 0
     missing = 0
@@ -889,7 +914,7 @@ def command_sync_github_project(args: argparse.Namespace) -> int:
 
         issue_url = project_item_issue_url(item)
         repo = repo_from_github_issue_url(issue_url)
-        page, match_reason = resolve_notion_issue_page(indexes, repo, issue_number, issue_url)
+        page, match_reason = resolve_notion_issue_page(indexes, repo, issue_number, issue_url, legacy_number_repo)
         if not page:
             if match_reason in {"ambiguous_number", "duplicate_url"}:
                 ambiguous += 1
@@ -904,6 +929,8 @@ def command_sync_github_project(args: argparse.Namespace) -> int:
             continue
 
         properties = project_item_update_properties(item, page, args.force_status)
+        if match_reason == "number" and issue_url and not normalize_github_issue_url(get_text(page, "GitHub Issue URL")):
+            properties["GitHub Issue URL"] = url_value(issue_url)
         if not properties:
             skipped += 1
             continue

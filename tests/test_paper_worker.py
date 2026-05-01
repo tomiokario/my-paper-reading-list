@@ -44,9 +44,27 @@ class GitHubIssueResolutionTests(unittest.TestCase):
         self.assertIs(page, target)
         self.assertEqual(reason, "url")
 
-    def test_single_missing_url_candidate_is_ambiguous(self):
+    def test_single_missing_url_candidate_resolves_by_number_for_legacy_repo(self):
         target = notion_page(7)
         indexes = ({}, {7: [target]})
+
+        page, reason = resolve_notion_issue_page(indexes, "owner/repo", 7, legacy_number_repo="owner/repo")
+
+        self.assertIs(page, target)
+        self.assertEqual(reason, "number")
+
+    def test_single_missing_url_candidate_is_ambiguous_for_non_legacy_repo(self):
+        target = notion_page(7)
+        indexes = ({}, {7: [target]})
+
+        page, reason = resolve_notion_issue_page(indexes, "other/repo", 7, legacy_number_repo="owner/repo")
+
+        self.assertIsNone(page)
+        self.assertEqual(reason, "ambiguous_number")
+
+    def test_single_different_repo_url_candidate_is_ambiguous(self):
+        target = notion_page(7, "https://github.com/other/repo/issues/7")
+        indexes = ({"https://github.com/other/repo/issues/7": [target]}, {7: [target]})
 
         page, reason = resolve_notion_issue_page(indexes, "owner/repo", 7)
 
@@ -305,6 +323,84 @@ class StatusCommandTests(unittest.TestCase):
 
 
 class EnvDefaultTests(unittest.TestCase):
+    def test_import_github_issues_backfills_single_number_match_url(self):
+        args = argparse.Namespace(repo="owner/repo", limit=1, dry_run=False)
+        page = notion_page(7)
+        issue = {
+            "number": 7,
+            "title": "Known paper",
+            "state": "open",
+            "html_url": "https://github.com/owner/repo/issues/7",
+            "labels": [],
+            "body": "",
+        }
+
+        with (
+            patch.dict(os.environ, {"GITHUB_REPOSITORY": "owner/repo"}),
+            patch.object(paper_worker, "github_issues", return_value=[issue]),
+            patch.object(paper_worker, "notion_issue_indexes", return_value=({}, {7: [page]})),
+            patch.object(paper_worker, "update_page") as update_page,
+            patch("sys.stdout", new_callable=io.StringIO),
+        ):
+            exit_code = paper_worker.command_import_github_issues(args)
+
+        self.assertEqual(exit_code, 0)
+        update_page.assert_called_once_with(
+            page["id"],
+            {"GitHub Issue URL": {"url": "https://github.com/owner/repo/issues/7"}},
+        )
+
+    def test_import_github_issues_does_not_backfill_single_number_match_for_non_default_repo(self):
+        args = argparse.Namespace(repo="other/repo", limit=1, dry_run=False)
+        page = notion_page(7)
+        issue = {
+            "number": 7,
+            "title": "Other paper",
+            "state": "open",
+            "html_url": "https://github.com/other/repo/issues/7",
+            "labels": [],
+            "body": "",
+        }
+
+        with (
+            patch.dict(os.environ, {"GITHUB_REPOSITORY": "owner/repo"}),
+            patch.object(paper_worker, "github_issues", return_value=[issue]),
+            patch.object(paper_worker, "notion_issue_indexes", return_value=({}, {7: [page]})),
+            patch.object(paper_worker, "update_page") as update_page,
+            patch("sys.stdout", new_callable=io.StringIO),
+            patch("sys.stderr", new_callable=io.StringIO),
+        ):
+            exit_code = paper_worker.command_import_github_issues(args)
+
+        self.assertEqual(exit_code, 0)
+        update_page.assert_not_called()
+
+    def test_sync_project_backfills_single_number_match_url(self):
+        args = argparse.Namespace(owner="owner", project_number=2, limit=10, dry_run=False, force_status=False)
+        page = notion_page(7)
+        item = {
+            "content": {
+                "number": 7,
+                "url": "https://github.com/owner/repo/issues/7",
+                "title": "Known paper",
+            },
+        }
+
+        with (
+            patch.dict(os.environ, {"GITHUB_REPOSITORY": "owner/repo"}),
+            patch.object(paper_worker, "github_project_items", return_value=[item]),
+            patch.object(paper_worker, "notion_issue_indexes", return_value=({}, {7: [page]})),
+            patch.object(paper_worker, "update_page") as update_page,
+            patch("sys.stdout", new_callable=io.StringIO),
+        ):
+            exit_code = paper_worker.command_sync_github_project(args)
+
+        self.assertEqual(exit_code, 0)
+        update_page.assert_called_once_with(
+            page["id"],
+            {"GitHub Issue URL": {"url": "https://github.com/owner/repo/issues/7"}},
+        )
+
     def test_import_github_issues_treats_empty_repository_env_as_default(self):
         args = argparse.Namespace(repo=None, limit=1, dry_run=True)
 
