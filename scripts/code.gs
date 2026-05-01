@@ -125,25 +125,30 @@ function createPaperProperties(entry, meta, oa, paperKey, label, sourceUrl, C) {
 }
 
 function existsInNotion(C, meta, sourceUrl, paperKey) {
+  const doiKey = normalizeIdentifier(meta.doi);
+  const arxivKey = normalizeIdentifier(meta.arxiv);
   const filters = [];
-  if (meta.doi) filters.push({ property: 'DOI', rich_text: { equals: meta.doi } });
-  if (meta.doi && meta.doi.toLowerCase() !== meta.doi) {
-    filters.push({ property: 'DOI', rich_text: { equals: meta.doi.toLowerCase() } });
-  }
-  if (meta.arxiv) filters.push({ property: 'arXiv ID', rich_text: { equals: meta.arxiv } });
-  if (meta.arxiv && meta.arxiv.toLowerCase() !== meta.arxiv) {
-    filters.push({ property: 'arXiv ID', rich_text: { equals: meta.arxiv.toLowerCase() } });
-  }
+  if (doiKey) filters.push({ property: 'DOI', rich_text: { is_not_empty: true } });
+  if (arxivKey) filters.push({ property: 'arXiv ID', rich_text: { is_not_empty: true } });
   if (sourceUrl) filters.push({ property: 'Source URL', url: { equals: sourceUrl } });
   if (paperKey) filters.push({ property: 'Paper Key', rich_text: { equals: paperKey } });
   if (filters.length === 0) return false;
 
-  const payload = {
-    page_size: 1,
+  const pages = queryNotionDatabase(C, {
     filter: filters.length === 1 ? filters[0] : { or: filters }
-  };
-  const data = notionRequest(C, 'post', `/databases/${C.NOTION_DATABASE_ID}/query`, payload);
-  return (data.results || []).length > 0;
+  });
+  return pages.some(page => {
+    const existingDoi = normalizeIdentifier(pagePropertyText(page, 'DOI'));
+    const existingArxiv = normalizeIdentifier(pagePropertyText(page, 'arXiv ID'));
+    const existingSourceUrl = pagePropertyText(page, 'Source URL');
+    const existingPaperKey = pagePropertyText(page, 'Paper Key');
+    return (
+      (doiKey && existingDoi === doiKey) ||
+      (arxivKey && existingArxiv === arxivKey) ||
+      (sourceUrl && existingSourceUrl === sourceUrl) ||
+      (paperKey && existingPaperKey === paperKey)
+    );
+  });
 }
 
 function createNotionPage(C, properties) {
@@ -173,6 +178,19 @@ function notionRequest(C, method, path, payload) {
     throw new Error(`Notion API error ${status}: ${text}`);
   }
   return data;
+}
+
+function queryNotionDatabase(C, payload) {
+  const results = [];
+  let cursor = '';
+  do {
+    const pagePayload = Object.assign({}, payload, { page_size: 100 });
+    if (cursor) pagePayload.start_cursor = cursor;
+    const data = notionRequest(C, 'post', `/databases/${C.NOTION_DATABASE_ID}/query`, pagePayload);
+    results.push.apply(results, data.results || []);
+    cursor = data.has_more ? data.next_cursor : '';
+  } while (cursor);
+  return results;
 }
 
 function databasePropertyType(C, name) {
@@ -223,6 +241,26 @@ function multiSelect(values) {
     })
     .slice(0, 20);
   return { multi_select: names.map(name => ({ name: truncateText(name, 100) })) };
+}
+
+function normalizeIdentifier(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function pagePropertyText(page, name) {
+  const prop = (page.properties || {})[name] || {};
+  const type = prop.type;
+  if (type === 'title') return joinedPlainText(prop.title);
+  if (type === 'rich_text') return joinedPlainText(prop.rich_text);
+  if (type === 'url') return prop.url || '';
+  if (type === 'select') return prop.select ? prop.select.name : '';
+  if (type === 'status') return prop.status ? prop.status.name : '';
+  if (type === 'number') return prop.number === null || prop.number === undefined ? '' : String(prop.number);
+  return '';
+}
+
+function joinedPlainText(parts) {
+  return (parts || []).map(part => part.plain_text || '').join('').trim();
 }
 
 function truncateText(value, maxLength) {
@@ -468,19 +506,11 @@ function decodeHtml(s) {
 }
 
 function buildPaperKey(doi, arxiv, urlNorm) {
-  if (doi) return 'doi-' + slugify(doi);
-  if (arxiv) return 'arxiv-' + slugify(arxiv);
+  if (doi) return 'doi:' + String(doi).toLowerCase();
+  if (arxiv) return 'arxiv:' + String(arxiv).toLowerCase();
   if (urlNorm) return 'url-' + Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_1, urlNorm)
     .map(byte => ('0' + (byte & 0xff).toString(16)).slice(-2))
     .join('')
     .slice(0, 12);
   return '';
-}
-
-function slugify(value) {
-  return String(value || '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 120);
 }
