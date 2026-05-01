@@ -67,6 +67,7 @@ function runHarvest() {
 }
 
 function processEntry(entry, label, C) {
+  ensureNotionDuplicateIndex(C);
   const finalUrl = expandScholarRedirect(entry.url);
   const sourceUrl = normalizeUrl(finalUrl || entry.url);
   const meta = resolveMetadata({ title: entry.title, url: finalUrl || entry.url });
@@ -90,6 +91,7 @@ function processEntry(entry, label, C) {
   }
 
   const page = createNotionPage(C, properties);
+  addToDuplicateIndex(C, meta);
   Logger.log(`Created Notion paper card: ${entry.title} (${page.id})`);
   return { processed: true, action: 'created', pageId: page.id };
 }
@@ -127,9 +129,10 @@ function createPaperProperties(entry, meta, oa, paperKey, label, sourceUrl, C) {
 function existsInNotion(C, meta, sourceUrl, paperKey) {
   const doiKey = normalizeIdentifier(meta.doi);
   const arxivKey = normalizeIdentifier(meta.arxiv);
+  if (doiKey && C._duplicateIndex.doi[doiKey]) return true;
+  if (arxivKey && C._duplicateIndex.arxiv[arxivKey]) return true;
+
   const filters = [];
-  if (doiKey) filters.push({ property: 'DOI', rich_text: { is_not_empty: true } });
-  if (arxivKey) filters.push({ property: 'arXiv ID', rich_text: { is_not_empty: true } });
   if (sourceUrl) filters.push({ property: 'Source URL', url: { equals: sourceUrl } });
   if (paperKey) filters.push({ property: 'Paper Key', rich_text: { equals: paperKey } });
   if (filters.length === 0) return false;
@@ -138,17 +141,42 @@ function existsInNotion(C, meta, sourceUrl, paperKey) {
     filter: filters.length === 1 ? filters[0] : { or: filters }
   });
   return pages.some(page => {
-    const existingDoi = normalizeIdentifier(pagePropertyText(page, 'DOI'));
-    const existingArxiv = normalizeIdentifier(pagePropertyText(page, 'arXiv ID'));
     const existingSourceUrl = pagePropertyText(page, 'Source URL');
     const existingPaperKey = pagePropertyText(page, 'Paper Key');
     return (
-      (doiKey && existingDoi === doiKey) ||
-      (arxivKey && existingArxiv === arxivKey) ||
       (sourceUrl && existingSourceUrl === sourceUrl) ||
       (paperKey && existingPaperKey === paperKey)
     );
   });
+}
+
+function ensureNotionDuplicateIndex(C) {
+  if (C._duplicateIndex) return C._duplicateIndex;
+  const pages = queryNotionDatabase(C, {
+    filter: {
+      or: [
+        { property: 'DOI', rich_text: { is_not_empty: true } },
+        { property: 'arXiv ID', rich_text: { is_not_empty: true } }
+      ]
+    }
+  });
+  const index = { doi: {}, arxiv: {} };
+  pages.forEach(page => {
+    const doiKey = normalizeIdentifier(pagePropertyText(page, 'DOI'));
+    const arxivKey = normalizeIdentifier(pagePropertyText(page, 'arXiv ID'));
+    if (doiKey) index.doi[doiKey] = true;
+    if (arxivKey) index.arxiv[arxivKey] = true;
+  });
+  C._duplicateIndex = index;
+  return index;
+}
+
+function addToDuplicateIndex(C, meta) {
+  const index = ensureNotionDuplicateIndex(C);
+  const doiKey = normalizeIdentifier(meta.doi);
+  const arxivKey = normalizeIdentifier(meta.arxiv);
+  if (doiKey) index.doi[doiKey] = true;
+  if (arxivKey) index.arxiv[arxivKey] = true;
 }
 
 function createNotionPage(C, properties) {
