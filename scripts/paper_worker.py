@@ -198,15 +198,15 @@ def resolve_notion_issue_page(
             return None, "duplicate_url"
 
     candidates = by_number.get(issue_number, [])
-    repo_matches = [
-        page
-        for page in candidates
-        if repo_from_github_issue_url(get_text(page, "GitHub Issue URL")) == repo.lower()
-    ]
+    repo_matches = []
+    if repo:
+        repo_matches = [
+            page
+            for page in candidates
+            if repo_from_github_issue_url(get_text(page, "GitHub Issue URL")) == repo.lower()
+        ]
     if len(repo_matches) == 1:
         return repo_matches[0], "repo_url"
-    if repo and len(candidates) == 1 and not get_text(candidates[0], "GitHub Issue URL"):
-        return candidates[0], "number_missing_url"
     if candidates:
         return None, "ambiguous_number"
     return None, "missing"
@@ -647,12 +647,6 @@ def command_import_github_issues(args: argparse.Namespace) -> int:
         issue_url = normalize_github_issue_url(issue.get("html_url", "") or github_issue_url(repo, issue["number"]))
         page, match_reason = resolve_notion_issue_page(indexes, repo, issue["number"], issue_url)
         if page:
-            if match_reason == "number_missing_url":
-                if args.dry_run:
-                    print(f"would backfill issue URL for #{issue['number']}: {issue_url}")
-                else:
-                    update_page(page["id"], {"GitHub Issue URL": url_value(issue_url)})
-                backfilled += 1
             skipped += 1
             continue
         if match_reason in {"ambiguous_number", "duplicate_url"}:
@@ -813,8 +807,6 @@ def command_sync_github_project(args: argparse.Namespace) -> int:
             continue
 
         properties = project_item_update_properties(item, page, args.force_status)
-        if match_reason == "number_missing_url" and issue_url:
-            properties["GitHub Issue URL"] = url_value(issue_url)
         if not properties:
             skipped += 1
             continue

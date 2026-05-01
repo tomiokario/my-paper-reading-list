@@ -38,14 +38,23 @@ class GitHubIssueResolutionTests(unittest.TestCase):
         self.assertIs(page, target)
         self.assertEqual(reason, "url")
 
-    def test_single_missing_url_candidate_can_be_backfilled(self):
+    def test_single_missing_url_candidate_is_ambiguous(self):
         target = notion_page(7)
         indexes = ({}, {7: [target]})
 
         page, reason = resolve_notion_issue_page(indexes, "owner/repo", 7)
 
-        self.assertIs(page, target)
-        self.assertEqual(reason, "number_missing_url")
+        self.assertIsNone(page)
+        self.assertEqual(reason, "ambiguous_number")
+
+    def test_empty_repo_does_not_match_missing_url_candidate(self):
+        target = notion_page(7)
+        indexes = ({}, {7: [target]})
+
+        page, reason = resolve_notion_issue_page(indexes, "", 7)
+
+        self.assertIsNone(page)
+        self.assertEqual(reason, "ambiguous_number")
 
     def test_multiple_number_candidates_are_ambiguous_without_matching_url(self):
         indexes = ({}, {7: [notion_page(7), notion_page(7)]})
