@@ -112,6 +112,54 @@ class NotionQueryTests(unittest.TestCase):
         self.assertEqual(calls[0]["page_size"], 10)
 
 
+class IssueImportParsingTests(unittest.TestCase):
+    def test_first_url_strips_markdown_autolink_delimiters(self):
+        value = "PDF: <https://arxiv.org/pdf/2601.00630>."
+
+        self.assertEqual(paper_worker.first_url(value), "https://arxiv.org/pdf/2601.00630")
+
+    def test_first_url_preserves_valid_autolink_trailing_characters(self):
+        value = "See <https://example.com/wiki/Foo_(bar)>."
+
+        self.assertEqual(paper_worker.first_url(value), "https://example.com/wiki/Foo_(bar)")
+
+    def test_extract_arxiv_accepts_legacy_identifiers(self):
+        self.assertEqual(paper_worker.extract_arxiv("https://arxiv.org/abs/cs/0112017"), "cs/0112017")
+        self.assertEqual(paper_worker.extract_arxiv("see hep-th/9901001v2"), "hep-th/9901001")
+
+    def test_extract_arxiv_does_not_treat_non_arxiv_url_paths_as_legacy_ids(self):
+        self.assertEqual(paper_worker.extract_arxiv("https://example.com/cs/0112017"), "")
+
+    def test_issue_import_uses_clean_autolink_urls_and_legacy_arxiv_id(self):
+        issue = {
+            "number": 7,
+            "title": "Legacy arXiv paper",
+            "state": "open",
+            "html_url": "https://github.com/owner/repo/issues/7",
+            "labels": [],
+            "body": "\n".join(
+                [
+                    "- **Source URL:** <https://arxiv.org/abs/cs/0112017>",
+                    "- **OA URL:** <https://arxiv.org/pdf/cs/0112017>",
+                ]
+            ),
+        }
+
+        with patch.object(paper_worker, "database_property_type", return_value="select"):
+            properties = paper_worker.issue_to_properties("owner/repo", issue)
+
+        self.assertEqual(properties["Source URL"], {"url": "https://arxiv.org/abs/cs/0112017"})
+        self.assertEqual(properties["PDF URL"], {"url": "https://arxiv.org/pdf/cs/0112017"})
+        self.assertEqual(
+            properties["arXiv ID"],
+            {"rich_text": [{"type": "text", "text": {"content": "cs/0112017"}}]},
+        )
+        self.assertEqual(
+            properties["Paper Key"],
+            {"rich_text": [{"type": "text", "text": {"content": "arxiv-cs-0112017"}}]},
+        )
+
+
 class ProjectItemUpdateTests(unittest.TestCase):
     def test_project_status_mapping_accepts_github_casing(self):
         page = notion_page(7, status="Inbox")

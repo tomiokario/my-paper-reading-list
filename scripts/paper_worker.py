@@ -604,7 +604,10 @@ def first_url(value: str) -> str:
     match = re.search(r"https?://\S+", value or "")
     if not match:
         return ""
-    return match.group(0).rstrip(").,")
+    url = match.group(0)
+    if match.start() > 0 and value[match.start() - 1] == "<" and ">" in url:
+        return url.split(">", 1)[0]
+    return url.rstrip(").,")
 
 
 def normalize_year(value: str) -> int | None:
@@ -620,10 +623,20 @@ def extract_doi(*values: str) -> str:
 
 def extract_arxiv(*values: str) -> str:
     joined = " ".join(v or "" for v in values)
-    match = re.search(r"arxiv\.org/(?:abs|pdf)/(\d{4}\.\d{4,5})(?:v\d+)?", joined, flags=re.I)
+    modern_id = r"\d{4}\.\d{4,5}"
+    legacy_archive = (
+        r"astro-ph|cond-mat|gr-qc|hep-ex|hep-lat|hep-ph|hep-th|math-ph|nlin|"
+        r"nucl-ex|nucl-th|physics|quant-ph|cs|math|q-bio|q-fin|stat"
+    )
+    legacy_id = rf"(?:{legacy_archive})(?:\.[A-Za-z-]+)?/\d{{7}}"
+
+    match = re.search(rf"arxiv\.org/(?:abs|pdf)/({modern_id}|{legacy_id})(?:v\d+)?", joined, flags=re.I)
     if match:
         return match.group(1)
-    match = re.search(r"\b(\d{4}\.\d{4,5})(?:v\d+)?\b", joined)
+    match = re.search(rf"\b({modern_id})(?:v\d+)?\b", joined)
+    if match:
+        return match.group(1)
+    match = re.search(rf"(?<![/\w.-])({legacy_id})(?:v\d+)?\b", joined, flags=re.I)
     return match.group(1) if match else ""
 
 
