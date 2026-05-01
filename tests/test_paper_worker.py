@@ -1,5 +1,6 @@
 import argparse
 import io
+import os
 import unittest
 from unittest.mock import patch
 
@@ -160,6 +161,36 @@ class PrepareCommandTests(unittest.TestCase):
 
         self.assertEqual(exit_code, 1)
         self.assertEqual(prepare_page.call_count, 2)
+
+
+class EnvDefaultTests(unittest.TestCase):
+    def test_import_github_issues_treats_empty_repository_env_as_default(self):
+        args = argparse.Namespace(repo=None, limit=1, dry_run=True)
+
+        with (
+            patch.dict(os.environ, {"GITHUB_REPOSITORY": ""}),
+            patch.object(paper_worker, "github_issues", return_value=[]) as github_issues,
+            patch.object(paper_worker, "notion_issue_indexes", return_value=({}, {})),
+            patch("sys.stdout", new_callable=io.StringIO),
+        ):
+            exit_code = paper_worker.command_import_github_issues(args)
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(github_issues.call_args.args[0], "tomiokario/my-paper-reading-list")
+
+    def test_sync_project_treats_empty_project_number_env_as_default(self):
+        args = argparse.Namespace(owner=None, project_number=None, limit=10, dry_run=True, force_status=False)
+
+        with (
+            patch.dict(os.environ, {"GITHUB_PROJECT_OWNER": "", "GITHUB_PROJECT_NUMBER": ""}),
+            patch.object(paper_worker, "github_project_items", return_value=[]) as github_project_items,
+            patch.object(paper_worker, "notion_issue_indexes", return_value=({}, {})),
+            patch("sys.stdout", new_callable=io.StringIO),
+        ):
+            exit_code = paper_worker.command_sync_github_project(args)
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(github_project_items.call_args.args, ("tomiokario", 2, 10))
 
 
 if __name__ == "__main__":

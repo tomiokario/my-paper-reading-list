@@ -72,6 +72,19 @@ def require_env(name: str) -> str:
     return value
 
 
+def env_or_default(name: str, default: str) -> str:
+    value = os.environ.get(name, "").strip()
+    return value or default
+
+
+def env_int_or_default(name: str, default: int) -> int:
+    value = env_or_default(name, str(default))
+    try:
+        return int(value)
+    except ValueError as exc:
+        raise PaperWorkerError(f"{name} must be an integer: {value}") from exc
+
+
 def notion_request(method: str, path: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
     token = require_env("NOTION_TOKEN")
     url = "https://api.notion.com/v1" + path
@@ -684,7 +697,7 @@ def github_issues(repo: str, limit: int) -> list[dict[str, Any]]:
 
 
 def command_import_github_issues(args: argparse.Namespace) -> int:
-    repo = args.repo or os.environ.get("GITHUB_REPOSITORY", "tomiokario/my-paper-reading-list")
+    repo = args.repo or env_or_default("GITHUB_REPOSITORY", "tomiokario/my-paper-reading-list")
     issues = github_issues(repo, args.limit)
     indexes = notion_issue_indexes()
     created = 0
@@ -823,8 +836,8 @@ def project_item_update_properties(
 
 
 def command_sync_github_project(args: argparse.Namespace) -> int:
-    owner = args.owner or os.environ.get("GITHUB_PROJECT_OWNER", "tomiokario")
-    project_number = args.project_number or int(os.environ.get("GITHUB_PROJECT_NUMBER", "2"))
+    owner = args.owner or env_or_default("GITHUB_PROJECT_OWNER", "tomiokario")
+    project_number = args.project_number or env_int_or_default("GITHUB_PROJECT_NUMBER", 2)
     items = github_project_items(owner, project_number, args.limit)
     indexes = notion_issue_indexes()
     updated = 0
