@@ -89,3 +89,4 @@ python scripts\paper_worker.py sync-github-project --owner owner --project-numbe
 - GitHub Projects sync uses the GitHub CLI, so `gh` must be installed and authenticated with `project`.
 - Full text extraction and translation are planned next.
 - Notion IDs and tokens must stay in `.env` or another local-only configuration file.
+- When reading Japanese Markdown in PowerShell, use `Get-Content -Encoding utf8`; see [PowerShell UTF-8 Reading Check](technical/powershell-utf8-reading.md).
