@@ -173,12 +173,32 @@ class IssueImportParsingTests(unittest.TestCase):
 
         self.assertNotIn("Source URL", meta)
 
+    def test_extract_doi_preserves_parenthesized_identifier(self):
+        value = (
+            "https://doi.org/10.1002/(SICI)1097-4571(199505)46:4"
+            "%3C327::AID-ASI6%3E3.0.CO;2-0)."
+        )
+
+        self.assertEqual(
+            paper_worker.extract_doi(value),
+            "10.1002/(SICI)1097-4571(199505)46:4%3C327::AID-ASI6%3E3.0.CO;2-0",
+        )
+
     def test_extract_arxiv_accepts_legacy_identifiers(self):
         self.assertEqual(paper_worker.extract_arxiv("https://arxiv.org/abs/cs/0112017"), "cs/0112017")
         self.assertEqual(paper_worker.extract_arxiv("see hep-th/9901001v2"), "hep-th/9901001")
 
+    def test_extract_arxiv_accepts_modern_arxiv_urls(self):
+        self.assertEqual(paper_worker.extract_arxiv("https://arxiv.org/abs/2601.00630v2"), "2601.00630")
+
+    def test_extract_arxiv_accepts_explicit_modern_identifier(self):
+        self.assertEqual(paper_worker.extract_arxiv("arXiv:2601.00630v2"), "2601.00630")
+
     def test_extract_arxiv_does_not_treat_non_arxiv_url_paths_as_legacy_ids(self):
         self.assertEqual(paper_worker.extract_arxiv("https://example.com/cs/0112017"), "")
+
+    def test_extract_arxiv_does_not_treat_non_arxiv_url_paths_as_modern_ids(self):
+        self.assertEqual(paper_worker.extract_arxiv("https://example.com/2024.12345"), "")
 
     def test_issue_import_uses_clean_autolink_urls_and_legacy_arxiv_id(self):
         issue = {
@@ -207,6 +227,49 @@ class IssueImportParsingTests(unittest.TestCase):
         self.assertEqual(
             properties["Paper Key"],
             {"rich_text": [{"type": "text", "text": {"content": "arxiv-cs-0112017"}}]},
+        )
+
+    def test_issue_import_uses_parenthesized_doi_for_key(self):
+        issue = {
+            "number": 8,
+            "title": "Parenthesized DOI",
+            "state": "open",
+            "html_url": "https://github.com/owner/repo/issues/8",
+            "labels": [],
+            "body": (
+                "- **Source URL**: "
+                "https://doi.org/10.1002/(SICI)1097-4571(199505)46:4"
+                "%3C327::AID-ASI6%3E3.0.CO;2-0)."
+            ),
+        }
+
+        with patch.object(paper_worker, "database_property_type", return_value="select"):
+            properties = paper_worker.issue_to_properties("owner/repo", issue)
+
+        doi = "10.1002/(SICI)1097-4571(199505)46:4%3C327::AID-ASI6%3E3.0.CO;2-0"
+        self.assertEqual(properties["DOI"], {"rich_text": [{"type": "text", "text": {"content": doi}}]})
+        self.assertEqual(
+            properties["Paper Key"],
+            {"rich_text": [{"type": "text", "text": {"content": "doi-10.1002-sici-1097-4571-199505-46-4-3c327-aid-asi6-3e3.0.co-2-0"}}]},
+        )
+
+    def test_issue_import_does_not_use_non_arxiv_numeric_url_as_arxiv_id(self):
+        issue = {
+            "number": 9,
+            "title": "Non arXiv numeric path",
+            "state": "open",
+            "html_url": "https://github.com/owner/repo/issues/9",
+            "labels": [],
+            "body": "- **Source URL**: https://example.com/2024.12345",
+        }
+
+        with patch.object(paper_worker, "database_property_type", return_value="select"):
+            properties = paper_worker.issue_to_properties("owner/repo", issue)
+
+        self.assertNotIn("arXiv ID", properties)
+        self.assertEqual(
+            properties["Paper Key"],
+            {"rich_text": [{"type": "text", "text": {"content": "github-owner-repo-issue-9"}}]},
         )
 
 

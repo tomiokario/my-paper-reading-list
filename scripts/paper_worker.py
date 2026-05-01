@@ -639,6 +639,20 @@ def first_url(value: str) -> str:
     return url
 
 
+def strip_unbalanced_trailing_delimiters(value: str) -> str:
+    value = value.rstrip(".,")
+    pairs = {"(": ")", "<": ">", "[": "]"}
+    changed = True
+    while changed and value:
+        changed = False
+        for opening, closing in pairs.items():
+            if value.endswith(closing) and value.count(closing) > value.count(opening):
+                value = value[:-1]
+                changed = True
+                break
+    return value
+
+
 def normalize_year(value: str) -> int | None:
     match = re.search(r"\d{4}", value or "")
     return int(match.group(0)) if match else None
@@ -646,8 +660,8 @@ def normalize_year(value: str) -> int | None:
 
 def extract_doi(*values: str) -> str:
     joined = " ".join(v or "" for v in values)
-    match = re.search(r"10\.\d{4,9}/[^\s)]+", joined, flags=re.I)
-    return match.group(0).rstrip(".,") if match else ""
+    match = re.search(r"10\.\d{4,9}/[^\s\"']+", joined, flags=re.I)
+    return strip_unbalanced_trailing_delimiters(match.group(0)) if match else ""
 
 
 def extract_arxiv(*values: str) -> str:
@@ -662,7 +676,7 @@ def extract_arxiv(*values: str) -> str:
     match = re.search(rf"arxiv\.org/(?:abs|pdf)/({modern_id}|{legacy_id})(?:v\d+)?", joined, flags=re.I)
     if match:
         return match.group(1)
-    match = re.search(rf"\b({modern_id})(?:v\d+)?\b", joined)
+    match = re.search(rf"\barxiv\s*:\s*({modern_id})(?:v\d+)?\b", joined, flags=re.I)
     if match:
         return match.group(1)
     match = re.search(rf"(?<![/\w.-])({legacy_id})(?:v\d+)?\b", joined, flags=re.I)
