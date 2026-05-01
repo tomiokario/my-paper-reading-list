@@ -153,6 +153,26 @@ class IssueImportParsingTests(unittest.TestCase):
 
         self.assertEqual(paper_worker.first_url(value), "https://example.com/wiki/Foo_(bar)")
 
+    def test_first_url_preserves_valid_markdown_link_trailing_parenthesis(self):
+        value = "See [paper](https://example.com/wiki/Foo_(bar))."
+
+        self.assertEqual(paper_worker.first_url(value), "https://example.com/wiki/Foo_(bar)")
+
+    def test_parse_issue_body_accepts_colon_after_bold_key(self):
+        meta = paper_worker.parse_issue_body("- **Source URL**: https://example.com/paper\n")
+
+        self.assertEqual(meta["Source URL"], "https://example.com/paper")
+
+    def test_parse_issue_body_accepts_colon_inside_bold_key(self):
+        meta = paper_worker.parse_issue_body("- **Source URL:** https://example.com/paper\n")
+
+        self.assertEqual(meta["Source URL"], "https://example.com/paper")
+
+    def test_parse_issue_body_requires_colon_separator_for_bold_fields(self):
+        meta = paper_worker.parse_issue_body("- **Source URL** https://example.com/paper\n")
+
+        self.assertNotIn("Source URL", meta)
+
     def test_extract_arxiv_accepts_legacy_identifiers(self):
         self.assertEqual(paper_worker.extract_arxiv("https://arxiv.org/abs/cs/0112017"), "cs/0112017")
         self.assertEqual(paper_worker.extract_arxiv("see hep-th/9901001v2"), "hep-th/9901001")
@@ -169,8 +189,8 @@ class IssueImportParsingTests(unittest.TestCase):
             "labels": [],
             "body": "\n".join(
                 [
-                    "- **Source URL:** <https://arxiv.org/abs/cs/0112017>",
-                    "- **OA URL:** <https://arxiv.org/pdf/cs/0112017>",
+                    "- **Source URL**: <https://arxiv.org/abs/cs/0112017>",
+                    "- **OA URL**: <https://arxiv.org/pdf/cs/0112017>",
                 ]
             ),
         }

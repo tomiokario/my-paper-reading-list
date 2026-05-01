@@ -589,7 +589,7 @@ def command_status(args: argparse.Namespace) -> int:
     return 0
 
 
-FIELD_RE = re.compile(r"^- \*\*(?P<key>[^:*]+)(?:[^*]*)?:\*\* (?P<value>.*)$")
+FIELD_RE = re.compile(r"^- \*\*(?P<key>[^:*]+?)\s*(?::\*\*|\*\*:)\s*(?P<value>.*)$")
 
 
 def parse_issue_body(body: str) -> dict[str, Any]:
@@ -633,7 +633,10 @@ def first_url(value: str) -> str:
     url = match.group(0)
     if match.start() > 0 and value[match.start() - 1] == "<" and ">" in url:
         return url.split(">", 1)[0]
-    return url.rstrip(").,")
+    url = url.rstrip(".,")
+    while url.endswith(")") and url.count(")") > url.count("("):
+        url = url[:-1]
+    return url
 
 
 def normalize_year(value: str) -> int | None:
