@@ -485,7 +485,17 @@ def prepare_page(page: dict[str, Any], dry_run: bool = False, skip_download: boo
     try:
         write_initial_files(page, target_dir)
         if not pdf_url:
-            raise PaperWorkerError("PDF URL is empty; add PDF URL and retry")
+            update_page(
+                page_id,
+                {
+                    "Status": status_value("Ready to read", page),
+                    "Local Folder": rich_text(str(target_dir)),
+                    "Process Tags": multi_select(["pdf_missing", "needs_manual_check"]),
+                    "Error Message": rich_text(""),
+                    "Last Processed": date_value(dt.datetime.now(dt.timezone.utc)),
+                },
+            )
+            return f"prepared without PDF: {title} -> {target_dir}"
 
         pdf_path = target_dir / "paper.pdf"
         if not skip_download and not pdf_path.exists():
@@ -539,7 +549,8 @@ def command_prepare(args: argparse.Namespace) -> int:
 
 
 def command_status(args: argparse.Namespace) -> int:
-    pages = query_database(page_size=min(args.limit, 100), max_results=args.limit)
+    page_size = 100 if args.limit is None else min(args.limit, 100)
+    pages = query_database(page_size=page_size, max_results=args.limit)
     if not pages:
         print("No papers found.")
         return 0
@@ -891,7 +902,7 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     status = subparsers.add_parser("status", help="Show Notion status counts")
-    status.add_argument("--limit", type=int, default=100)
+    status.add_argument("--limit", type=int, default=None, help="Limit rows for debugging; default scans all")
     status.set_defaults(func=command_status)
 
     prepare = subparsers.add_parser("prepare", help="Prepare papers marked Want to read")

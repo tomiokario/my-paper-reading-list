@@ -2,6 +2,7 @@ import argparse
 import io
 import os
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 import scripts.paper_worker as paper_worker
@@ -161,6 +162,57 @@ class PrepareCommandTests(unittest.TestCase):
 
         self.assertEqual(exit_code, 1)
         self.assertEqual(prepare_page.call_count, 2)
+
+
+class PreparePageTests(unittest.TestCase):
+    def test_prepare_without_pdf_url_keeps_metadata_ready_for_manual_pdf(self):
+        page = notion_page(1, status="Want to read")
+
+        with (
+            patch.object(paper_worker, "paper_dir_for", return_value=Path("paper-dir")),
+            patch.object(paper_worker, "write_initial_files") as write_initial_files,
+            patch.object(paper_worker, "download_pdf") as download_pdf,
+            patch.object(paper_worker, "update_page") as update_page,
+        ):
+            result = paper_worker.prepare_page(page, dry_run=False, skip_download=True)
+
+        self.assertIn("prepared without PDF", result)
+        write_initial_files.assert_called_once_with(page, Path("paper-dir"))
+        download_pdf.assert_not_called()
+        self.assertEqual(update_page.call_count, 2)
+        final_properties = update_page.call_args_list[-1].args[1]
+        self.assertEqual(final_properties["Status"], {"select": {"name": "Ready to read"}})
+        self.assertEqual(
+            final_properties["Process Tags"],
+            {"multi_select": [{"name": "pdf_missing"}, {"name": "needs_manual_check"}]},
+        )
+        self.assertEqual(final_properties["Error Message"], {"rich_text": []})
+
+
+class StatusCommandTests(unittest.TestCase):
+    def test_status_counts_all_pages_by_default(self):
+        args = argparse.Namespace(limit=None)
+
+        with (
+            patch.object(paper_worker, "query_database", return_value=[notion_page(1, status="Inbox")]) as query_database,
+            patch("sys.stdout", new_callable=io.StringIO),
+        ):
+            exit_code = paper_worker.command_status(args)
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(query_database.call_args.kwargs, {"page_size": 100, "max_results": None})
+
+    def test_status_limit_is_only_applied_when_explicit(self):
+        args = argparse.Namespace(limit=10)
+
+        with (
+            patch.object(paper_worker, "query_database", return_value=[notion_page(1, status="Inbox")]) as query_database,
+            patch("sys.stdout", new_callable=io.StringIO),
+        ):
+            exit_code = paper_worker.command_status(args)
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(query_database.call_args.kwargs, {"page_size": 10, "max_results": 10})
 
 
 class EnvDefaultTests(unittest.TestCase):
