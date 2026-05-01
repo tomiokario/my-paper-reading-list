@@ -93,7 +93,11 @@ Codex review returns a positive result. A positive result means either a visible
 not find major issues.
 
 If Codex review returns actionable comments, requested changes, or major issues,
-address them before considering the PR ready. After each fix:
+first decide whether each comment is valid. For each valid comment, the
+implementer adds a `+1` reaction to that review comment and replies with the fix
+or planned fix. For each invalid or inapplicable comment, do not add `+1`; reply
+with the reason it is not being applied or with the alternate approach. Then
+address valid comments before considering the PR ready. After each fix:
 
 1. update the implementation in the issue worktree,
 2. rerun the appropriate local validation,
@@ -103,7 +107,8 @@ address them before considering the PR ready. After each fix:
 
 Do not stop at PR creation when Codex review has not completed yet. Completion
 reports must state whether GitHub Codex review reached `+1` / no-major-issues,
-or explain why that check could not be completed.
+whether review comments received `+1` / replies as appropriate, or explain why
+that check could not be completed.
 
 ## Pull Request Language
 
