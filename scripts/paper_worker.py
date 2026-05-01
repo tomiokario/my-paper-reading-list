@@ -109,9 +109,16 @@ def github_request(path: str) -> Any:
         raise PaperWorkerError(f"GitHub API request failed: {exc}") from exc
 
 
-def query_database(filter_payload: dict[str, Any] | None = None, page_size: int = 50) -> list[dict[str, Any]]:
+def query_database(
+    filter_payload: dict[str, Any] | None = None,
+    page_size: int = 50,
+    max_results: int | None = None,
+) -> list[dict[str, Any]]:
     database_id = require_env("NOTION_PAPER_DATABASE_ID")
-    payload: dict[str, Any] = {"page_size": page_size}
+    if max_results is not None and max_results <= 0:
+        return []
+
+    payload: dict[str, Any] = {"page_size": page_size if max_results is None else min(page_size, max_results)}
     if filter_payload:
         payload["filter"] = filter_payload
 
@@ -119,9 +126,13 @@ def query_database(filter_payload: dict[str, Any] | None = None, page_size: int 
     while True:
         data = notion_request("POST", f"/databases/{database_id}/query", payload)
         pages.extend(data.get("results", []))
+        if max_results is not None and len(pages) >= max_results:
+            return pages[:max_results]
         if not data.get("has_more"):
             break
         payload["start_cursor"] = data["next_cursor"]
+        if max_results is not None:
+            payload["page_size"] = min(page_size, max_results - len(pages))
     return pages
 
 
@@ -149,14 +160,14 @@ def repo_from_github_issue_url(value: str) -> str:
     return f"{parts[0]}/{parts[1]}"
 
 
-def notion_issue_indexes() -> tuple[dict[str, dict[str, Any]], dict[int, list[dict[str, Any]]]]:
+def notion_issue_indexes() -> tuple[dict[str, list[dict[str, Any]]], dict[int, list[dict[str, Any]]]]:
     pages = query_database(page_size=100)
-    by_url: dict[str, dict[str, Any]] = {}
+    by_url: dict[str, list[dict[str, Any]]] = {}
     by_number: dict[int, list[dict[str, Any]]] = {}
     for page in pages:
         issue_url = normalize_github_issue_url(get_text(page, "GitHub Issue URL"))
         if issue_url:
-            by_url[issue_url] = page
+            by_url.setdefault(issue_url, []).append(page)
         value = get_number(page, "GitHub Issue Number")
         if isinstance(value, (int, float)):
             by_number.setdefault(int(value), []).append(page)
@@ -164,7 +175,7 @@ def notion_issue_indexes() -> tuple[dict[str, dict[str, Any]], dict[int, list[di
 
 
 def resolve_notion_issue_page(
-    indexes: tuple[dict[str, dict[str, Any]], dict[int, list[dict[str, Any]]]],
+    indexes: tuple[dict[str, list[dict[str, Any]]], dict[int, list[dict[str, Any]]]],
     repo: str,
     issue_number: int,
     issue_url: str = "",
@@ -177,9 +188,11 @@ def resolve_notion_issue_page(
         if not normalized or normalized in seen_urls:
             continue
         seen_urls.add(normalized)
-        page = by_url.get(normalized)
-        if page:
-            return page, "url"
+        matches = by_url.get(normalized, [])
+        if len(matches) == 1:
+            return matches[0], "url"
+        if len(matches) > 1:
+            return None, "duplicate_url"
 
     candidates = by_number.get(issue_number, [])
     repo_matches = [
@@ -444,6 +457,7 @@ def command_prepare(args: argparse.Namespace) -> int:
     pages = query_database(
         {"property": "Status", "select": {"equals": "Want to read"}},
         page_size=args.limit,
+        max_results=args.limit,
     )
     if not pages:
         print("No papers with Status = Want to read.")
@@ -459,7 +473,7 @@ def command_prepare(args: argparse.Namespace) -> int:
 
 
 def command_status(args: argparse.Namespace) -> int:
-    pages = query_database(page_size=args.limit)
+    pages = query_database(page_size=min(args.limit, 100), max_results=args.limit)
     if not pages:
         print("No papers found.")
         return 0
@@ -636,9 +650,9 @@ def command_import_github_issues(args: argparse.Namespace) -> int:
                 backfilled += 1
             skipped += 1
             continue
-        if match_reason == "ambiguous_number":
+        if match_reason in {"ambiguous_number", "duplicate_url"}:
             print(
-                f"skipped ambiguous issue #{issue['number']} from {repo}; add GitHub Issue URL to the existing card",
+                f"skipped ambiguous issue #{issue['number']} from {repo} ({match_reason}); check duplicate or missing GitHub Issue URL fields",
                 file=sys.stderr,
             )
             ambiguous += 1
@@ -699,7 +713,7 @@ def project_item_title(item: dict[str, Any]) -> str:
 
 def notion_pages_by_issue_url() -> dict[str, dict[str, Any]]:
     by_url, _ = notion_issue_indexes()
-    return by_url
+    return {issue_url: pages[0] for issue_url, pages in by_url.items() if len(pages) == 1}
 
 
 def github_project_items(owner: str, project_number: int, limit: int) -> list[dict[str, Any]]:
@@ -781,10 +795,10 @@ def command_sync_github_project(args: argparse.Namespace) -> int:
         repo = repo_from_github_issue_url(issue_url)
         page, match_reason = resolve_notion_issue_page(indexes, repo, issue_number, issue_url)
         if not page:
-            if match_reason == "ambiguous_number":
+            if match_reason in {"ambiguous_number", "duplicate_url"}:
                 ambiguous += 1
                 print(
-                    f"ambiguous Notion card for issue #{issue_number} ({issue_url}): {project_item_title(item)}",
+                    f"ambiguous Notion card for issue #{issue_number} ({issue_url}, {match_reason}): {project_item_title(item)}",
                     file=sys.stderr,
                 )
                 skipped += 1

@@ -23,8 +23,8 @@ class GitHubIssueResolutionTests(unittest.TestCase):
         other_repo = notion_page(7, "https://github.com/other/repo/issues/7")
         indexes = (
             {
-                "https://github.com/owner/repo/issues/7": target,
-                "https://github.com/other/repo/issues/7": other_repo,
+                "https://github.com/owner/repo/issues/7": [target],
+                "https://github.com/other/repo/issues/7": [other_repo],
             },
             {7: [target, other_repo]},
         )
@@ -50,6 +50,15 @@ class GitHubIssueResolutionTests(unittest.TestCase):
 
         self.assertIsNone(page)
         self.assertEqual(reason, "ambiguous_number")
+
+    def test_duplicate_issue_urls_are_ambiguous(self):
+        url = "https://github.com/owner/repo/issues/7"
+        indexes = ({url: [notion_page(7, url), notion_page(7, url)]}, {7: []})
+
+        page, reason = resolve_notion_issue_page(indexes, "owner/repo", 7)
+
+        self.assertIsNone(page)
+        self.assertEqual(reason, "duplicate_url")
 
 
 if __name__ == "__main__":
