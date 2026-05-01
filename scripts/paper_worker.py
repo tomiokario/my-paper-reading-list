@@ -28,11 +28,11 @@ from typing import Any
 NOTION_VERSION = os.environ.get("NOTION_VERSION", "2022-06-28")
 
 PROJECT_STATUS_MAP = {
-    "Backlog": "Inbox",
-    "Pending": "Later",
-    "Ready": "Want to read",
-    "In progress": "Reading",
-    "Done": "Read",
+    "backlog": "Inbox",
+    "pending": "Later",
+    "ready": "Want to read",
+    "in progress": "Reading",
+    "done": "Read",
 }
 
 PROJECT_PRIORITY_MAP = {
@@ -754,7 +754,7 @@ def project_item_update_properties(
     properties: dict[str, Any] = {}
 
     project_status = str(item.get("status") or "").strip()
-    target_status = PROJECT_STATUS_MAP.get(project_status)
+    target_status = PROJECT_STATUS_MAP.get(project_status.lower())
     current_status = get_text(page, "Status")
     if target_status and target_status != current_status:
         should_preserve = (

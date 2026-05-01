@@ -7,12 +7,13 @@ import scripts.paper_worker as paper_worker
 from scripts.paper_worker import normalize_github_issue_url, resolve_notion_issue_page
 
 
-def notion_page(issue_number, issue_url=""):
+def notion_page(issue_number, issue_url="", status=""):
     return {
         "id": f"page-{issue_number}-{issue_url or 'missing'}",
         "properties": {
             "GitHub Issue Number": {"type": "number", "number": issue_number},
             "GitHub Issue URL": {"type": "url", "url": issue_url or None},
+            "Status": {"type": "select", "select": {"name": status} if status else None},
         },
     }
 
@@ -104,6 +105,16 @@ class NotionQueryTests(unittest.TestCase):
             paper_worker.query_database(page_size=500, max_results=10)
 
         self.assertEqual(calls[0]["page_size"], 10)
+
+
+class ProjectItemUpdateTests(unittest.TestCase):
+    def test_project_status_mapping_accepts_github_casing(self):
+        page = notion_page(7, status="Inbox")
+        item = {"status": "In Progress"}
+
+        properties = paper_worker.project_item_update_properties(item, page, force_status=False)
+
+        self.assertEqual(properties["Status"], {"select": {"name": "Reading"}})
 
 
 class PrepareCommandTests(unittest.TestCase):
