@@ -26,6 +26,7 @@ from typing import Any
 
 
 NOTION_VERSION = os.environ.get("NOTION_VERSION", "2022-06-28")
+DATABASE_PROPERTY_TYPES: dict[str, str] | None = None
 
 PROJECT_STATUS_MAP = {
     "backlog": "Inbox",
@@ -139,6 +140,25 @@ def query_database(
     return pages
 
 
+def database_property_types() -> dict[str, str]:
+    global DATABASE_PROPERTY_TYPES
+    if DATABASE_PROPERTY_TYPES is not None:
+        return DATABASE_PROPERTY_TYPES
+    database_id = require_env("NOTION_PAPER_DATABASE_ID")
+    data = notion_request("GET", f"/databases/{database_id}")
+    properties = data.get("properties", {})
+    DATABASE_PROPERTY_TYPES = {
+        name: str(prop.get("type") or "")
+        for name, prop in properties.items()
+        if isinstance(prop, dict)
+    }
+    return DATABASE_PROPERTY_TYPES
+
+
+def database_property_type(name: str, default: str = "select") -> str:
+    return database_property_types().get(name) or default
+
+
 def normalize_github_issue_url(value: str) -> str:
     stripped = (value or "").strip().rstrip("/")
     parsed = urllib.parse.urlparse(stripped)
@@ -227,6 +247,31 @@ def select(name: str) -> dict[str, Any]:
     return {"select": {"name": name}}
 
 
+def status_choice(name: str) -> dict[str, Any]:
+    return {"status": {"name": name}}
+
+
+def page_property_type(page: dict[str, Any], name: str) -> str:
+    prop = page.get("properties", {}).get(name, {})
+    if isinstance(prop, dict):
+        return str(prop.get("type") or "")
+    return ""
+
+
+def status_value(name: str, page: dict[str, Any] | None = None) -> dict[str, Any]:
+    prop_type = page_property_type(page, "Status") if page is not None else database_property_type("Status")
+    if prop_type == "status":
+        return status_choice(name)
+    return select(name)
+
+
+def status_filter(name: str) -> dict[str, Any]:
+    prop_type = database_property_type("Status")
+    if prop_type == "status":
+        return {"property": "Status", "status": {"equals": name}}
+    return {"property": "Status", "select": {"equals": name}}
+
+
 def url_value(value: str) -> dict[str, Any]:
     return {"url": value or None}
 
@@ -267,6 +312,9 @@ def get_text(page: dict[str, Any], name: str) -> str:
         return "" if value is None else str(value)
     if prop_type == "select":
         value = prop.get("select")
+        return "" if value is None else value.get("name", "")
+    if prop_type == "status":
+        value = prop.get("status")
         return "" if value is None else value.get("name", "")
     return ""
 
@@ -415,7 +463,7 @@ def prepare_page(page: dict[str, Any], dry_run: bool = False, skip_download: boo
     update_page(
         page_id,
         {
-            "Status": select("Preparing"),
+            "Status": status_value("Preparing", page),
             "Local Folder": rich_text(str(target_dir)),
             "Last Processed": date_value(dt.datetime.now(dt.timezone.utc)),
         },
@@ -433,7 +481,7 @@ def prepare_page(page: dict[str, Any], dry_run: bool = False, skip_download: boo
         update_page(
             page_id,
             {
-                "Status": select("Ready to read"),
+                "Status": status_value("Ready to read", page),
                 "Local Folder": rich_text(str(target_dir)),
                 "Process Tags": multi_select([]),
                 "Error Message": rich_text(""),
@@ -446,7 +494,7 @@ def prepare_page(page: dict[str, Any], dry_run: bool = False, skip_download: boo
         update_page(
             page_id,
             {
-                "Status": select("Error"),
+                "Status": status_value("Error", page),
                 "Local Folder": rich_text(str(target_dir)),
                 "Process Tags": multi_select([tag, "needs_manual_check"]),
                 "Error Message": rich_text(str(exc)),
@@ -458,7 +506,7 @@ def prepare_page(page: dict[str, Any], dry_run: bool = False, skip_download: boo
 
 def command_prepare(args: argparse.Namespace) -> int:
     pages = query_database(
-        {"property": "Status", "select": {"equals": "Want to read"}},
+        status_filter("Want to read"),
         page_size=min(args.limit, 100),
         max_results=args.limit,
     )
@@ -593,7 +641,7 @@ def issue_to_properties(repo: str, issue: dict[str, Any]) -> dict[str, Any]:
 
     properties: dict[str, Any] = {
         "Title": title_value(issue.get("title") or meta.get("English Title") or f"Issue {issue['number']}"),
-        "Status": select(status),
+        "Status": status_value(status),
         "GitHub Issue Number": number_value(issue["number"]),
         "GitHub Issue URL": url_value(issue.get("html_url", "")),
         "Original Issue State": select((issue.get("state") or "").upper()),
@@ -763,7 +811,7 @@ def project_item_update_properties(
             and target_status in DEMOTING_PROJECT_TARGETS
         )
         if not should_preserve:
-            properties["Status"] = select(target_status)
+            properties["Status"] = status_value(target_status, page)
 
     project_priority = str(item.get("priority") or "").strip()
     target_priority = PROJECT_PRIORITY_MAP.get(project_priority)

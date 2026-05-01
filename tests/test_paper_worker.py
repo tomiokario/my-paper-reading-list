@@ -7,13 +7,16 @@ import scripts.paper_worker as paper_worker
 from scripts.paper_worker import normalize_github_issue_url, resolve_notion_issue_page
 
 
-def notion_page(issue_number, issue_url="", status=""):
+def notion_page(issue_number, issue_url="", status="", status_type="select"):
+    status_property = {"type": "status", "status": {"name": status} if status else None}
+    if status_type == "select":
+        status_property = {"type": "select", "select": {"name": status} if status else None}
     return {
         "id": f"page-{issue_number}-{issue_url or 'missing'}",
         "properties": {
             "GitHub Issue Number": {"type": "number", "number": issue_number},
             "GitHub Issue URL": {"type": "url", "url": issue_url or None},
-            "Status": {"type": "select", "select": {"name": status} if status else None},
+            "Status": status_property,
         },
     }
 
@@ -116,13 +119,38 @@ class ProjectItemUpdateTests(unittest.TestCase):
 
         self.assertEqual(properties["Status"], {"select": {"name": "Reading"}})
 
+    def test_project_status_update_uses_native_status_property(self):
+        page = notion_page(7, status="Inbox", status_type="status")
+        item = {"status": "In Progress"}
+
+        properties = paper_worker.project_item_update_properties(item, page, force_status=False)
+
+        self.assertEqual(properties["Status"], {"status": {"name": "Reading"}})
+
 
 class PrepareCommandTests(unittest.TestCase):
+    def test_prepare_uses_native_status_filter_when_schema_requires_it(self):
+        args = argparse.Namespace(limit=2, dry_run=True, skip_download=False, keep_going=False)
+
+        with (
+            patch.object(paper_worker, "database_property_type", return_value="status"),
+            patch.object(paper_worker, "query_database", return_value=[]) as query_database,
+            patch("sys.stdout", new_callable=io.StringIO),
+        ):
+            exit_code = paper_worker.command_prepare(args)
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(
+            query_database.call_args.args[0],
+            {"property": "Status", "status": {"equals": "Want to read"}},
+        )
+
     def test_keep_going_still_returns_failure_after_any_failed_item(self):
         pages = [notion_page(1), notion_page(2)]
         args = argparse.Namespace(limit=2, dry_run=False, skip_download=False, keep_going=True)
 
         with (
+            patch.object(paper_worker, "database_property_type", return_value="select"),
             patch.object(paper_worker, "query_database", return_value=pages),
             patch.object(paper_worker, "prepare_page", side_effect=[RuntimeError("boom"), "prepared"]) as prepare_page,
             patch("sys.stdout", new_callable=io.StringIO),
