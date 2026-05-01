@@ -39,6 +39,15 @@ The public repository should still make sense without access to any private over
 
 See [docs/paper-reading-system-spec.md](docs/paper-reading-system-spec.md).
 
+The current Google Scholar alert intake flow creates paper cards in Notion.
+Gmail alert messages are parsed by automation, deduplicated against the Notion
+paper database, and stored as `Inbox` cards for review. The older
+GitHub-Issue-based intake is kept only as legacy documentation.
+
+Notion credentials and database IDs must stay out of tracked files. Use Google
+Apps Script Properties for Gmail/Scholar automation, or local-only settings such
+as `.env` for CLI work.
+
 ## Getting Started
 
 See [docs/getting-started.md](docs/getting-started.md).

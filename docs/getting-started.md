@@ -68,7 +68,39 @@ Show status counts:
 python scripts\paper_worker.py status
 ```
 
-Import existing GitHub Issues into Notion:
+## 5. Import Gmail Google Scholar Alerts into Notion
+
+The current Google Scholar alert intake creates Notion paper cards, not GitHub
+Issues. The Apps Script automation reads labeled Gmail messages, extracts paper
+candidates, checks for duplicates in Notion, and creates `Inbox` cards in the
+Notion paper database.
+
+Keep Apps Script secrets in Script Properties:
+
+```text
+NOTION_TOKEN=
+NOTION_PAPER_DATABASE_ID=
+LABELS_JSON=["google-scholar"]
+DRY_RUN=true
+```
+
+`NOTION_DATABASE_ID` may be used only as a local compatibility alias for
+`NOTION_PAPER_DATABASE_ID`.
+
+Before enabling writes, run the Apps Script with `DRY_RUN=true` and inspect the
+logs. Dry-run mode should report the Notion cards that would be created and
+leave Gmail messages unread.
+
+After the dry-run looks correct, set `DRY_RUN=false` in Script Properties and run
+the importer again. A Gmail message should be marked read only after all paper
+candidates from that message are handled successfully. If Notion creation fails,
+leave the message unread so the import can be retried after fixing the problem.
+
+## 6. Migrate Legacy GitHub Issues into Notion
+
+Older docs under `docs/legacy/` describe the previous GitHub Issues / Projects
+workflow. For current operation, Notion paper cards are the source of truth. Use
+these commands only when importing existing GitHub Issues into Notion:
 
 ```powershell
 python scripts\paper_worker.py import-github-issues --repo owner/repository --dry-run
