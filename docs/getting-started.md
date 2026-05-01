@@ -50,6 +50,8 @@ PDF URL = <direct PDF URL if available>
 
 ## 4. Run the CLI
 
+This section lists implemented commands only. Planned commands such as `collect`, `translate`, `retry --failed`, and `show paper-id` are tracked in the README and should not be used until their issues are implemented.
+
 Preview what would happen:
 
 ```powershell
@@ -87,5 +89,6 @@ python scripts\paper_worker.py sync-github-project --owner owner --project-numbe
 
 - The CLI currently creates the local folder, `metadata.json`, `notes.md`, and downloads `paper.pdf` when `PDF URL` is present.
 - GitHub Projects sync uses the GitHub CLI, so `gh` must be installed and authenticated with `project`.
-- Full text extraction and translation are planned next.
+- Full text extraction, summary generation, translation, retry, diagnostic display, and background operation are planned in the linked issues in the README.
 - Notion IDs and tokens must stay in `.env` or another local-only configuration file.
+- PDF files, extracted text, translations, personal notes, logs, and machine-specific paths must stay in private data storage or local-only files, not in tracked repository files.

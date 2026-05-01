@@ -235,6 +235,38 @@ paper-worker status
 paper-worker show paper-id
 ```
 
+## CLI implementation status
+
+This specification includes target commands that are not all implemented yet.
+The current public implementation status is summarized in
+[../README.md](../README.md#cli-command-status).
+
+Implemented commands:
+
+| Command | Current behavior |
+| --- | --- |
+| `status` | Shows Notion paper status counts. |
+| `prepare` | Prepares `Want to read` papers by creating private local files and downloading `paper.pdf` when `PDF URL` is present. |
+| `import-github-issues` | Imports GitHub Issues into Notion paper cards. |
+| `sync-github-project` | Syncs GitHub Projects status and priority into imported Notion cards. |
+
+Planned commands and dependent workflow work:
+
+| Planned item | Tracking issue |
+| --- | --- |
+| `collect` | [#110](https://github.com/tomiokario/my-paper-reading-list/issues/110) |
+| PDF text extraction and `summary.ja.md` | [#111](https://github.com/tomiokario/my-paper-reading-list/issues/111) |
+| `translate` | [#112](https://github.com/tomiokario/my-paper-reading-list/issues/112) |
+| `retry --failed` | [#113](https://github.com/tomiokario/my-paper-reading-list/issues/113) |
+| background `prepare --keep-going` operation | [#114](https://github.com/tomiokario/my-paper-reading-list/issues/114) |
+| `show paper-id` | [#115](https://github.com/tomiokario/my-paper-reading-list/issues/115) |
+| Notion Error view and schema docs | [#116](https://github.com/tomiokario/my-paper-reading-list/issues/116) |
+
+Planned items must not be documented as available CLI behavior until their tracking
+issues are implemented. Private data boundaries still apply: PDFs, extracted text,
+translations, personal notes, logs, Notion database IDs, API tokens, sync state, and
+machine-specific paths stay outside tracked repository files.
+
 ユーザーが困った場合は、Codex に CLI の出力やログを確認させて修正を依頼する。
 
 ## エラー処理
