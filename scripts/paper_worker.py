@@ -443,16 +443,23 @@ def same_notion_page_id(left: str, right: str) -> bool:
     return len(normalized_left) == 32 and normalized_left == normalized_right
 
 
-def show_lookup_filter(paper_id: str) -> dict[str, Any]:
-    normalized_issue_url = normalize_github_issue_url(paper_id)
-    url_values = [paper_id]
-    if normalized_issue_url and normalized_issue_url != paper_id:
-        url_values.append(normalized_issue_url)
+def show_url_variants(value: str) -> list[str]:
+    raw = (value or "").strip()
+    variants = [raw] if raw else []
+    normalized_issue_url = normalize_github_issue_url(raw)
+    if normalized_issue_url and normalized_issue_url not in variants:
+        variants.append(normalized_issue_url)
+    without_trailing_slash = raw.rstrip("/")
+    if without_trailing_slash and without_trailing_slash not in variants:
+        variants.append(without_trailing_slash)
+    return variants
 
+
+def show_lookup_filter(paper_id: str) -> dict[str, Any]:
     filters: list[dict[str, Any]] = [
         {"property": "Paper Key", "rich_text": {"equals": paper_id}},
     ]
-    for value in url_values:
+    for value in show_url_variants(paper_id):
         filters.extend(
             [
                 {"property": "Source URL", "url": {"equals": value}},
@@ -467,7 +474,7 @@ def show_match_reason(page: dict[str, Any], paper_id: str) -> str:
         return "Notion page id"
     if get_text(page, "Paper Key") == paper_id:
         return "Paper Key"
-    if get_text(page, "Source URL") == paper_id:
+    if get_text(page, "Source URL") in show_url_variants(paper_id):
         return "Source URL"
     if normalize_github_issue_url(get_text(page, "GitHub Issue URL")) == normalize_github_issue_url(paper_id):
         return "GitHub Issue URL"

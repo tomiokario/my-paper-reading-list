@@ -446,6 +446,15 @@ class ShowCommandTests(unittest.TestCase):
             {"property": "Paper Key", "rich_text": {"equals": "paper-key"}},
         )
 
+    def test_find_page_for_show_matches_normalized_source_url_variant(self):
+        page = show_page()
+
+        with patch.object(paper_worker, "query_database", return_value=[page]):
+            result, reason = paper_worker.find_page_for_show("https://example.com/paper/")
+
+        self.assertIs(result, page)
+        self.assertEqual(reason, "Source URL")
+
     def test_find_page_for_show_matches_notion_page_id_without_database_scan(self):
         page = show_page()
 
