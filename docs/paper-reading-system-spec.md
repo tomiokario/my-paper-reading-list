@@ -366,6 +366,9 @@ tags
 source
 ```
 
+`tags` can be a JSON array or a comma-separated string. `priority` and each normalized tag must not
+contain commas because Notion select and multi-select option names do not allow commas.
+
 Example:
 
 ```json

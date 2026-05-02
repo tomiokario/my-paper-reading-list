@@ -60,6 +60,8 @@ python scripts\paper_worker.py collect --input candidates.json
 The initial `collect` input is either one JSON object or an array of objects. `title` is required.
 Optional fields are `source_url` or `url`, `pdf_url`, `doi`, `arxiv_id`, `authors`, `year`,
 `venue`, `summary_ja`, `reason`, `relevance_note`, `priority`, `tags`, and `source`.
+`tags` can be a JSON array or a comma-separated string. `priority` and each tag must not contain
+commas after normalization because Notion select option names do not allow commas.
 
 Example:
 

@@ -759,7 +759,14 @@ def normalize_collect_list(value: Any) -> list[str]:
     if isinstance(value, list):
         return [normalize_collect_string(item) for item in value if normalize_collect_string(item)]
     text = normalize_collect_string(value)
+    if "," in text:
+        return [item.strip() for item in text.split(",") if item.strip()]
     return [text] if text else []
+
+
+def validate_select_option_name(value: str, field_name: str) -> None:
+    if "," in value:
+        raise PaperWorkerError(f"{field_name} must not contain commas: {value}")
 
 
 def normalize_collect_arxiv_id(value: Any, *fallback_values: str) -> str:
@@ -837,6 +844,11 @@ def collect_paper_key(record: dict[str, Any]) -> str:
 
 
 def collect_record_to_properties(record: dict[str, Any]) -> dict[str, Any]:
+    if record.get("priority"):
+        validate_select_option_name(record["priority"], "priority")
+    for tag in record.get("tags", []):
+        validate_select_option_name(tag, "tags")
+
     properties: dict[str, Any] = {
         "Title": title_value(record["title"]),
         "Status": status_value("Inbox"),

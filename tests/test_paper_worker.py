@@ -367,6 +367,48 @@ class CollectCommandTests(unittest.TestCase):
         self.assertEqual(properties["Priority"], {"select": {"name": "High"}})
         self.assertEqual(properties["Tags"], {"multi_select": [{"name": "llm"}]})
 
+    def test_collect_splits_comma_separated_tags(self):
+        args, input_patch = self.collect_args(
+            {
+                "title": "Tagged Paper",
+                "tags": "survey, llm",
+            },
+            dry_run=False,
+        )
+
+        with (
+            input_patch,
+            patch.object(paper_worker, "query_database", return_value=[]),
+            patch.object(paper_worker, "database_property_type", return_value="select"),
+            patch.object(paper_worker, "create_page") as create_page,
+            patch("sys.stdout", new_callable=io.StringIO),
+        ):
+            exit_code = paper_worker.command_collect(args)
+
+        self.assertEqual(exit_code, 0)
+        properties = create_page.call_args.args[0]
+        self.assertEqual(properties["Tags"], {"multi_select": [{"name": "survey"}, {"name": "llm"}]})
+
+    def test_collect_rejects_comma_in_priority_before_create(self):
+        args, input_patch = self.collect_args(
+            {
+                "title": "Invalid Priority",
+                "priority": "High,urgent",
+            },
+            dry_run=False,
+        )
+
+        with (
+            input_patch,
+            patch.object(paper_worker, "query_database", return_value=[]),
+            patch.object(paper_worker, "database_property_type", return_value="select"),
+            patch.object(paper_worker, "create_page") as create_page,
+        ):
+            with self.assertRaisesRegex(paper_worker.PaperWorkerError, "priority must not contain commas"):
+                paper_worker.command_collect(args)
+
+        create_page.assert_not_called()
+
     def test_collect_skips_existing_doi_duplicate(self):
         args, input_patch = self.collect_args({"title": "Duplicate Paper", "doi": "10.5555/example"})
 
