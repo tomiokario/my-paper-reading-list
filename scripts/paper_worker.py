@@ -359,6 +359,13 @@ def get_multi_select(page: dict[str, Any], name: str) -> list[str]:
     return [item["name"] for item in prop.get("multi_select", [])]
 
 
+def format_property_value(page: dict[str, Any], name: str) -> str:
+    values = get_multi_select(page, name)
+    if values:
+        return ", ".join(values)
+    return get_text(page, name)
+
+
 def slugify(value: str) -> str:
     value = value.lower().strip()
     value = re.sub(r"https?://", "", value)
@@ -419,6 +426,100 @@ def data_root() -> Path:
 
 def paper_dir_for(page: dict[str, Any]) -> Path:
     return data_root() / "papers" / slugify(paper_key(page))
+
+
+def normalized_notion_page_id(value: str) -> str:
+    return re.sub(r"[^0-9a-f]", "", (value or "").lower())
+
+
+def looks_like_notion_page_id(value: str) -> bool:
+    normalized = normalized_notion_page_id(value)
+    return len(normalized) == 32 and bool(re.fullmatch(r"[0-9a-fA-F]{32}|[0-9a-fA-F-]{36}", (value or "").strip()))
+
+
+def same_notion_page_id(left: str, right: str) -> bool:
+    normalized_left = normalized_notion_page_id(left)
+    normalized_right = normalized_notion_page_id(right)
+    return len(normalized_left) == 32 and normalized_left == normalized_right
+
+
+def show_lookup_filter(paper_id: str) -> dict[str, Any]:
+    normalized_issue_url = normalize_github_issue_url(paper_id)
+    url_values = [paper_id]
+    if normalized_issue_url and normalized_issue_url != paper_id:
+        url_values.append(normalized_issue_url)
+
+    filters: list[dict[str, Any]] = [
+        {"property": "Paper Key", "rich_text": {"equals": paper_id}},
+    ]
+    for value in url_values:
+        filters.extend(
+            [
+                {"property": "Source URL", "url": {"equals": value}},
+                {"property": "GitHub Issue URL", "url": {"equals": value}},
+            ]
+        )
+    return {"or": filters}
+
+
+def show_match_reason(page: dict[str, Any], paper_id: str) -> str:
+    if same_notion_page_id(page.get("id", ""), paper_id):
+        return "Notion page id"
+    if get_text(page, "Paper Key") == paper_id:
+        return "Paper Key"
+    if get_text(page, "Source URL") == paper_id:
+        return "Source URL"
+    if normalize_github_issue_url(get_text(page, "GitHub Issue URL")) == normalize_github_issue_url(paper_id):
+        return "GitHub Issue URL"
+    return ""
+
+
+def find_page_for_show(paper_id: str) -> tuple[dict[str, Any] | None, str]:
+    if looks_like_notion_page_id(paper_id):
+        try:
+            page = notion_request("GET", f"/pages/{paper_id}")
+        except PaperWorkerError as exc:
+            detail = str(exc)
+            if not (detail.startswith("Notion API error 400") or detail.startswith("Notion API error 404")):
+                raise
+            page = None
+        if isinstance(page, dict) and page.get("object") == "page":
+            return page, "Notion page id"
+
+    pages = query_database(show_lookup_filter(paper_id), page_size=10, max_results=10)
+    matches = [(page, show_match_reason(page, paper_id)) for page in pages]
+    matches = [(page, reason) for page, reason in matches if reason]
+    if not matches:
+        return None, ""
+    if len(matches) > 1:
+        ids = ", ".join(page.get("id", "(missing id)") for page, _ in matches)
+        raise PaperWorkerError(f"Multiple Notion pages matched {paper_id!r}: {ids}")
+    return matches[0]
+
+
+def local_folder_for_show(page: dict[str, Any]) -> tuple[Path | None, str]:
+    local_folder = get_text(page, "Local Folder")
+    if local_folder:
+        return Path(local_folder).expanduser(), "Local Folder"
+    try:
+        return paper_dir_for(page), "expected from PAPER_READING_DATA_ROOT"
+    except PaperWorkerError:
+        return None, "Local Folder is empty and PAPER_READING_DATA_ROOT is not set"
+
+
+def local_artifact_statuses(paper_dir: Path) -> list[tuple[str, str]]:
+    checks = [
+        ("metadata.json", paper_dir / "metadata.json", "file"),
+        ("paper.pdf", paper_dir / "paper.pdf", "file"),
+        ("extracted.txt", paper_dir / "extracted.txt", "file"),
+        ("summary.ja.md", paper_dir / "summary.ja.md", "file"),
+        ("translations/", paper_dir / "translations", "dir"),
+    ]
+    statuses = []
+    for label, path, kind in checks:
+        exists = path.is_dir() if kind == "dir" else path.is_file()
+        statuses.append((label, "exists" if exists else "missing"))
+    return statuses
 
 
 def update_page(page_id: str, properties: dict[str, Any]) -> None:
@@ -586,6 +687,45 @@ def command_status(args: argparse.Namespace) -> int:
         counts[status] = counts.get(status, 0) + 1
     for status in sorted(counts):
         print(f"{status}: {counts[status]}")
+    return 0
+
+
+SHOW_PROPERTIES = [
+    "Title",
+    "Status",
+    "Paper Key",
+    "DOI",
+    "arXiv ID",
+    "Source URL",
+    "PDF URL",
+    "GitHub Issue URL",
+    "Local Folder",
+    "Process Tags",
+    "Error Message",
+]
+
+
+def command_show(args: argparse.Namespace) -> int:
+    page, matched_by = find_page_for_show(args.paper_id)
+    if page is None:
+        print(f"No paper found for {args.paper_id!r}.", file=sys.stderr)
+        return 1
+
+    print("Notion")
+    print(f"  Page ID: {page.get('id', '')}")
+    print(f"  Matched By: {matched_by}")
+    for name in SHOW_PROPERTIES:
+        value = get_title(page) if name == "Title" else format_property_value(page, name)
+        print(f"  {name}: {value or '(empty)'}")
+
+    paper_dir, folder_source = local_folder_for_show(page)
+    print("Local Files")
+    if paper_dir is None:
+        print(f"  Folder: unavailable ({folder_source})")
+        return 0
+    print(f"  Folder: {paper_dir} ({folder_source})")
+    for label, status in local_artifact_statuses(paper_dir):
+        print(f"  {label}: {status}")
     return 0
 
 
@@ -973,6 +1113,10 @@ def build_parser() -> argparse.ArgumentParser:
     status = subparsers.add_parser("status", help="Show Notion status counts")
     status.add_argument("--limit", type=int, default=None, help="Limit rows for debugging; default scans all")
     status.set_defaults(func=command_status)
+
+    show = subparsers.add_parser("show", help="Show one paper's Notion and local file status")
+    show.add_argument("paper_id", help="Paper Key, Notion page id, Source URL, or GitHub Issue URL")
+    show.set_defaults(func=command_show)
 
     prepare = subparsers.add_parser("prepare", help="Prepare papers marked Want to read")
     prepare.add_argument("--limit", type=int, default=10)

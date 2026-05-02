@@ -68,6 +68,14 @@ Show status counts:
 python scripts\paper_worker.py status
 ```
 
+Inspect one Notion paper card and its local file readiness:
+
+```powershell
+python scripts\paper_worker.py show paper-id
+```
+
+`paper-id` can be a Paper Key or Notion page ID. The command prints selected Notion properties and whether expected local files such as `metadata.json`, `paper.pdf`, `extracted.txt`, `summary.ja.md`, and `translations/` exist. It does not print private file bodies or personal notes.
+
 Import existing GitHub Issues into Notion:
 
 ```powershell
