@@ -61,9 +61,14 @@ If you import GitHub Issues or sync GitHub Projects, also add:
 
 Set `Status` options for normal operation:
 
+- `Inbox`: newly imported candidates from Gmail Scholar alerts, manual entry, or other intake flows.
+- `Later`: worth keeping, but not ready to prepare now.
 - `Want to read`: ready for the CLI to prepare local files.
 - `Preparing`: the CLI or Codex is working on the card.
 - `Ready to read`: local reading files are ready, or the card is ready with a manual-check tag.
+- `Reading`: currently being read.
+- `Read`: finished.
+- `Skip`: not worth reading.
 - `Error`: automatic processing failed and needs review.
 
 You can keep existing cards. Add missing properties to the database, copy values from old lowercase properties such as `status` or `local folder` into the exact property names above, and avoid recreating cards only for schema cleanup.
