@@ -114,6 +114,23 @@ remaining risks, and closing issue references. Keep command names, file paths,
 environment variable names, and exact tool output snippets in their original
 literal form.
 
+## Replacement Pull Requests
+
+複数 PR の内容を統合した置き換え PR を作る場合は、置き換え元 PR を本文に明記する。
+
+本文には以下のような節を置き、merge 時に GitHub が対象 PR / Issue を自動 close できるよう closing reference を書く。
+
+```markdown
+## 置き換える PR
+
+PR #129 に内容を統合したため、merge 時に以下を close する。
+
+Closes #123
+Closes #124
+```
+
+すでに統合 PR を merge 済みで closing reference が自動発火しない場合は、統合先 PR の本文やコメントに記録を残し、置き換え元 PR へ superseded 理由をコメントして close する。
+
 ## Process Update Rule
 
 Process updates come first. If the user changes the development workflow, review sequence, storage policy, or agent rules, update the canonical operating files before applying that new workflow to the current task.
