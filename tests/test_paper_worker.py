@@ -384,6 +384,46 @@ class CollectCommandTests(unittest.TestCase):
         self.assertIn("skipped duplicate (DOI): Duplicate Paper", stdout.getvalue())
         self.assertIn("done: would_create=0 skipped=1", stdout.getvalue())
 
+    def test_collect_skips_existing_doi_url_duplicate(self):
+        args, input_patch = self.collect_args({"title": "Duplicate Paper", "doi": "10.5555/example"})
+
+        with (
+            input_patch,
+            patch.object(
+                paper_worker,
+                "query_database",
+                return_value=[collect_page("Existing", DOI="https://doi.org/10.5555/example")],
+            ),
+            patch.object(paper_worker, "database_property_type", return_value="select"),
+            patch.object(paper_worker, "create_page") as create_page,
+            patch("sys.stdout", new_callable=io.StringIO) as stdout,
+        ):
+            exit_code = paper_worker.command_collect(args)
+
+        self.assertEqual(exit_code, 0)
+        create_page.assert_not_called()
+        self.assertIn("skipped duplicate (DOI): Duplicate Paper", stdout.getvalue())
+
+    def test_collect_skips_existing_arxiv_version_duplicate(self):
+        args, input_patch = self.collect_args({"title": "Duplicate Paper", "arxiv_id": "2601.00630"})
+
+        with (
+            input_patch,
+            patch.object(
+                paper_worker,
+                "query_database",
+                return_value=[collect_page("Existing", **{"arXiv ID": "2601.00630v2"})],
+            ),
+            patch.object(paper_worker, "database_property_type", return_value="select"),
+            patch.object(paper_worker, "create_page") as create_page,
+            patch("sys.stdout", new_callable=io.StringIO) as stdout,
+        ):
+            exit_code = paper_worker.command_collect(args)
+
+        self.assertEqual(exit_code, 0)
+        create_page.assert_not_called()
+        self.assertIn("skipped duplicate (arXiv ID): Duplicate Paper", stdout.getvalue())
+
     def test_collect_skips_existing_title_duplicate(self):
         args, input_patch = self.collect_args({"title": "Known Paper"})
 

@@ -890,10 +890,14 @@ def collect_duplicate_keys(record: dict[str, Any]) -> list[tuple[str, str]]:
 
 
 def collect_page_duplicate_keys(page: dict[str, Any]) -> list[tuple[str, str]]:
+    source_url = get_text(page, "Source URL")
+    doi = extract_doi(get_text(page, "DOI"), source_url)
+    if not doi:
+        doi = normalize_collect_string(get_text(page, "DOI"))
     record = {
-        "doi": get_text(page, "DOI"),
-        "arxiv_id": get_text(page, "arXiv ID"),
-        "source_url": get_text(page, "Source URL"),
+        "doi": doi,
+        "arxiv_id": normalize_collect_arxiv_id(get_text(page, "arXiv ID"), source_url),
+        "source_url": source_url,
         "paper_key": get_text(page, "Paper Key"),
         "title": get_title(page),
     }
