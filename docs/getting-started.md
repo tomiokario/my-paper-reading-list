@@ -50,6 +50,44 @@ PDF URL = <direct PDF URL if available>
 
 ## 4. Run the CLI
 
+Collect candidate papers into the Notion Inbox from a local JSON file:
+
+```powershell
+python scripts\paper_worker.py collect --input candidates.json --dry-run
+python scripts\paper_worker.py collect --input candidates.json
+```
+
+The initial `collect` input is either one JSON object or an array of objects. `title` is required.
+Optional fields are `source_url` or `url`, `pdf_url`, `doi`, `arxiv_id`, `authors`, `year`,
+`venue`, `summary_ja`, `reason`, `relevance_note`, `priority`, `tags`, and `source`.
+
+Example:
+
+```json
+[
+  {
+    "title": "Example Paper",
+    "source_url": "https://doi.org/10.1234/example",
+    "pdf_url": "https://example.com/paper.pdf",
+    "authors": ["A. Researcher", "B. Author"],
+    "year": 2026,
+    "venue": "ExampleConf",
+    "summary_ja": "Short Japanese summary",
+    "reason": "Why this should be considered",
+    "relevance_note": "How this connects to the reading list",
+    "priority": "Medium",
+    "tags": ["survey"],
+    "source": "manual"
+  }
+]
+```
+
+`collect --dry-run` queries Notion, prints cards that would be created, and prints duplicate skips
+without creating pages. Duplicate checks use DOI, arXiv ID, Source URL, Paper Key, and Title against
+existing Notion pages and earlier items in the same input file. New cards are created with
+`Status = Inbox`. Notion tokens, database IDs, and private paper data must stay in `.env` or other
+local-only files, not in `candidates.json` or tracked docs.
+
 Preview what would happen:
 
 ```powershell
@@ -86,6 +124,7 @@ python scripts\paper_worker.py sync-github-project --owner owner --project-numbe
 ## Notes
 
 - The CLI currently creates the local folder, `metadata.json`, `notes.md`, and downloads `paper.pdf` when `PDF URL` is present.
+- `collect` creates Notion Inbox cards only; it does not download PDFs or write private data.
 - GitHub Projects sync uses the GitHub CLI, so `gh` must be installed and authenticated with `project`.
 - Full text extraction and translation are planned next.
 - Notion IDs and tokens must stay in `.env` or another local-only configuration file.

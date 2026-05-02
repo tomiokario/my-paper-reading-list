@@ -745,6 +745,215 @@ def issue_to_properties(repo: str, issue: dict[str, Any]) -> dict[str, Any]:
     return properties
 
 
+def normalize_collect_string(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value.strip()
+    return str(value).strip()
+
+
+def normalize_collect_list(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [normalize_collect_string(item) for item in value if normalize_collect_string(item)]
+    text = normalize_collect_string(value)
+    return [text] if text else []
+
+
+def normalize_collect_arxiv_id(value: Any, *fallback_values: str) -> str:
+    text = normalize_collect_string(value)
+    arxiv = extract_arxiv(text, *fallback_values)
+    if arxiv:
+        return arxiv
+    match = re.fullmatch(r"(\d{4}\.\d{4,5})(?:v\d+)?", text, flags=re.I)
+    return match.group(1) if match else text
+
+
+def load_collect_input(path: Path) -> list[dict[str, Any]]:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise PaperWorkerError(f"Could not read collect input: {path}") from exc
+    except json.JSONDecodeError as exc:
+        raise PaperWorkerError(f"Collect input must be JSON: {exc}") from exc
+
+    if isinstance(data, dict):
+        items = [data]
+    elif isinstance(data, list):
+        items = data
+    else:
+        raise PaperWorkerError("Collect input must be an object or an array of objects")
+
+    records: list[dict[str, Any]] = []
+    for index, item in enumerate(items, start=1):
+        if not isinstance(item, dict):
+            raise PaperWorkerError(f"Collect item #{index} must be an object")
+        title = normalize_collect_string(item.get("title"))
+        if not title:
+            raise PaperWorkerError(f"Collect item #{index} is missing required field: title")
+        records.append(item)
+    return records
+
+
+def collect_record(raw: dict[str, Any]) -> dict[str, Any]:
+    title = normalize_collect_string(raw.get("title"))
+    source_url = first_url(normalize_collect_string(raw.get("source_url") or raw.get("url")))
+    pdf_url = first_url(normalize_collect_string(raw.get("pdf_url")))
+    doi = extract_doi(normalize_collect_string(raw.get("doi")), source_url, pdf_url)
+    arxiv = normalize_collect_arxiv_id(raw.get("arxiv_id"), source_url, pdf_url)
+    if not doi:
+        doi = normalize_collect_string(raw.get("doi"))
+
+    record: dict[str, Any] = {
+        "title": title,
+        "source_url": source_url,
+        "pdf_url": pdf_url,
+        "doi": doi,
+        "arxiv_id": arxiv,
+        "authors": ", ".join(normalize_collect_list(raw.get("authors"))),
+        "year": normalize_year(normalize_collect_string(raw.get("year"))),
+        "venue": normalize_collect_string(raw.get("venue")),
+        "summary_ja": normalize_collect_string(raw.get("summary_ja")),
+        "reason": normalize_collect_string(raw.get("reason")),
+        "relevance_note": normalize_collect_string(raw.get("relevance_note")),
+        "priority": normalize_collect_string(raw.get("priority")),
+        "tags": normalize_collect_list(raw.get("tags"))[:20],
+        "source": normalize_collect_string(raw.get("source")),
+    }
+    record["paper_key"] = collect_paper_key(record)
+    return record
+
+
+def collect_paper_key(record: dict[str, Any]) -> str:
+    if record.get("doi"):
+        return "doi-" + slugify(record["doi"])
+    if record.get("arxiv_id"):
+        return "arxiv-" + slugify(record["arxiv_id"])
+    if record.get("source_url"):
+        return "url-" + slugify(record["source_url"])
+    return "title-" + slugify(record["title"])
+
+
+def collect_record_to_properties(record: dict[str, Any]) -> dict[str, Any]:
+    properties: dict[str, Any] = {
+        "Title": title_value(record["title"]),
+        "Status": status_value("Inbox"),
+        "Paper Key": rich_text(record["paper_key"]),
+    }
+    optional_rich_text_fields = {
+        "DOI": "doi",
+        "arXiv ID": "arxiv_id",
+        "Authors": "authors",
+        "Venue": "venue",
+        "Short Summary JA": "summary_ja",
+        "Reason": "reason",
+        "Relevance Note": "relevance_note",
+        "Source": "source",
+    }
+    for property_name, record_key in optional_rich_text_fields.items():
+        value = record.get(record_key)
+        if value:
+            properties[property_name] = rich_text(value)
+    if record.get("source_url"):
+        properties["Source URL"] = url_value(record["source_url"])
+    if record.get("pdf_url"):
+        properties["PDF URL"] = url_value(record["pdf_url"])
+    if record.get("year") is not None:
+        properties["Year"] = number_value(record["year"])
+    if record.get("priority"):
+        properties["Priority"] = select(record["priority"])
+    if record.get("tags"):
+        properties["Tags"] = multi_select(record["tags"])
+    return properties
+
+
+def normalize_duplicate_value(value: str) -> str:
+    return re.sub(r"\s+", " ", (value or "").strip()).lower()
+
+
+def collect_duplicate_keys(record: dict[str, Any]) -> list[tuple[str, str]]:
+    candidates = [
+        ("DOI", record.get("doi", "")),
+        ("arXiv ID", record.get("arxiv_id", "")),
+        ("Source URL", record.get("source_url", "")),
+        ("Paper Key", record.get("paper_key", "")),
+        ("Title", record.get("title", "")),
+    ]
+    keys: list[tuple[str, str]] = []
+    for label, value in candidates:
+        normalized = normalize_duplicate_value(value)
+        if normalized:
+            keys.append((label, f"{label}:{normalized}"))
+    return keys
+
+
+def collect_page_duplicate_keys(page: dict[str, Any]) -> list[tuple[str, str]]:
+    record = {
+        "doi": get_text(page, "DOI"),
+        "arxiv_id": get_text(page, "arXiv ID"),
+        "source_url": get_text(page, "Source URL"),
+        "paper_key": get_text(page, "Paper Key"),
+        "title": get_title(page),
+    }
+    return collect_duplicate_keys(record)
+
+
+def collect_duplicate_index() -> dict[str, dict[str, Any]]:
+    pages = query_database(page_size=100)
+    index: dict[str, dict[str, Any]] = {}
+    for page in pages:
+        for _, key in collect_page_duplicate_keys(page):
+            index.setdefault(key, page)
+    return index
+
+
+def collect_duplicate_reason(record: dict[str, Any], index: dict[str, dict[str, Any]]) -> str:
+    for label, key in collect_duplicate_keys(record):
+        if key in index:
+            return label
+    return ""
+
+
+def add_collect_record_to_index(
+    index: dict[str, dict[str, Any]],
+    record: dict[str, Any],
+    page: dict[str, Any] | None = None,
+) -> None:
+    marker = page or {"id": f"collect:{record['paper_key']}", "properties": {}}
+    for _, key in collect_duplicate_keys(record):
+        index.setdefault(key, marker)
+
+
+def command_collect(args: argparse.Namespace) -> int:
+    raw_items = load_collect_input(Path(args.input))
+    index = collect_duplicate_index()
+    created = 0
+    skipped = 0
+
+    for raw_item in raw_items:
+        record = collect_record(raw_item)
+        duplicate_reason = collect_duplicate_reason(record, index)
+        if duplicate_reason:
+            print(f"skipped duplicate ({duplicate_reason}): {record['title']}")
+            skipped += 1
+            continue
+
+        properties = collect_record_to_properties(record)
+        if args.dry_run:
+            print(f"would collect: {record['title']} [{record['paper_key']}]")
+        else:
+            create_page(properties)
+            print(f"collected: {record['title']} [{record['paper_key']}]")
+        add_collect_record_to_index(index, record)
+        created += 1
+
+    action = "would_create" if args.dry_run else "created"
+    print(f"done: {action}={created} skipped={skipped}")
+    return 0
+
+
 def github_issues(repo: str, limit: int) -> list[dict[str, Any]]:
     encoded_repo = urllib.parse.quote(repo, safe="/")
     issues: list[dict[str, Any]] = []
@@ -980,6 +1189,11 @@ def build_parser() -> argparse.ArgumentParser:
     prepare.add_argument("--skip-download", action="store_true")
     prepare.add_argument("--keep-going", action="store_true")
     prepare.set_defaults(func=command_prepare)
+
+    collect = subparsers.add_parser("collect", help="Collect candidate papers into Notion Inbox")
+    collect.add_argument("--input", required=True, help="Path to a JSON object or array of objects")
+    collect.add_argument("--dry-run", action="store_true", help="Print planned creates and duplicate skips")
+    collect.set_defaults(func=command_collect)
 
     import_issues = subparsers.add_parser("import-github-issues", help="Import GitHub issues into Notion")
     import_issues.add_argument("--repo", default=None)

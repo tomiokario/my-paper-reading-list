@@ -1,5 +1,6 @@
 import argparse
 import io
+import json
 import os
 import unittest
 from pathlib import Path
@@ -21,6 +22,19 @@ def notion_page(issue_number, issue_url="", status="", status_type="select"):
             "Status": status_property,
         },
     }
+
+
+def collect_page(title, **fields):
+    properties = {
+        "Title": {"type": "title", "title": [{"plain_text": title}]},
+        "Status": {"type": "select", "select": {"name": "Inbox"}},
+    }
+    for name, value in fields.items():
+        if name == "Source URL":
+            properties[name] = {"type": "url", "url": value}
+        else:
+            properties[name] = {"type": "rich_text", "rich_text": [{"plain_text": value}]}
+    return {"id": f"page-{paper_worker.slugify(title)}", "properties": properties}
 
 
 class GitHubIssueResolutionTests(unittest.TestCase):
@@ -271,6 +285,141 @@ class IssueImportParsingTests(unittest.TestCase):
             properties["Paper Key"],
             {"rich_text": [{"type": "text", "text": {"content": "github-owner-repo-issue-9"}}]},
         )
+
+
+class CollectCommandTests(unittest.TestCase):
+    def collect_args(self, payload, dry_run=True):
+        records = payload if isinstance(payload, list) else [payload]
+        return (
+            argparse.Namespace(input="collect.json", dry_run=dry_run),
+            patch.object(paper_worker, "load_collect_input", return_value=records),
+        )
+
+    def test_collect_parser_registers_command(self):
+        args = paper_worker.build_parser().parse_args(["collect", "--input", "papers.json", "--dry-run"])
+
+        self.assertIs(args.func, paper_worker.command_collect)
+        self.assertEqual(args.input, "papers.json")
+        self.assertTrue(args.dry_run)
+
+    def test_collect_dry_run_prints_planned_card_without_creating(self):
+        args, input_patch = self.collect_args(
+            {
+                "title": "A Useful Paper",
+                "source_url": "https://doi.org/10.1234/example",
+                "tags": ["reading-list", "survey"],
+            }
+        )
+
+        with (
+            input_patch,
+            patch.object(paper_worker, "query_database", return_value=[]),
+            patch.object(paper_worker, "database_property_type", return_value="select"),
+            patch.object(paper_worker, "create_page") as create_page,
+            patch("sys.stdout", new_callable=io.StringIO) as stdout,
+        ):
+            exit_code = paper_worker.command_collect(args)
+
+        self.assertEqual(exit_code, 0)
+        create_page.assert_not_called()
+        self.assertIn("would collect: A Useful Paper [doi-10.1234-example]", stdout.getvalue())
+        self.assertIn("done: would_create=1 skipped=0", stdout.getvalue())
+
+    def test_collect_creates_inbox_card_properties(self):
+        args, input_patch = self.collect_args(
+            {
+                "title": "Collected Paper",
+                "url": "https://example.com/collected-paper",
+                "pdf_url": "https://arxiv.org/pdf/2601.00630v2",
+                "arxiv_id": "2601.00630v2",
+                "authors": "A. Researcher",
+                "year": "2026",
+                "venue": "ExampleConf",
+                "summary_ja": "Short summary",
+                "reason": "Looks relevant",
+                "relevance_note": "Matches the project",
+                "priority": "High",
+                "tags": ["llm"],
+                "source": "manual",
+            },
+            dry_run=False,
+        )
+
+        with (
+            input_patch,
+            patch.object(paper_worker, "query_database", return_value=[]),
+            patch.object(paper_worker, "database_property_type", return_value="select"),
+            patch.object(paper_worker, "create_page") as create_page,
+            patch("sys.stdout", new_callable=io.StringIO),
+        ):
+            exit_code = paper_worker.command_collect(args)
+
+        self.assertEqual(exit_code, 0)
+        create_page.assert_called_once()
+        properties = create_page.call_args.args[0]
+        self.assertEqual(properties["Title"], {"title": [{"type": "text", "text": {"content": "Collected Paper"}}]})
+        self.assertEqual(properties["Status"], {"select": {"name": "Inbox"}})
+        self.assertEqual(properties["Paper Key"], {"rich_text": [{"type": "text", "text": {"content": "arxiv-2601.00630"}}]})
+        self.assertEqual(properties["Source URL"], {"url": "https://example.com/collected-paper"})
+        self.assertEqual(properties["PDF URL"], {"url": "https://arxiv.org/pdf/2601.00630v2"})
+        self.assertEqual(properties["arXiv ID"], {"rich_text": [{"type": "text", "text": {"content": "2601.00630"}}]})
+        self.assertEqual(properties["Year"], {"number": 2026})
+        self.assertEqual(properties["Priority"], {"select": {"name": "High"}})
+        self.assertEqual(properties["Tags"], {"multi_select": [{"name": "llm"}]})
+
+    def test_collect_skips_existing_doi_duplicate(self):
+        args, input_patch = self.collect_args({"title": "Duplicate Paper", "doi": "10.5555/example"})
+
+        with (
+            input_patch,
+            patch.object(paper_worker, "query_database", return_value=[collect_page("Existing", DOI="10.5555/example")]),
+            patch.object(paper_worker, "database_property_type", return_value="select"),
+            patch.object(paper_worker, "create_page") as create_page,
+            patch("sys.stdout", new_callable=io.StringIO) as stdout,
+        ):
+            exit_code = paper_worker.command_collect(args)
+
+        self.assertEqual(exit_code, 0)
+        create_page.assert_not_called()
+        self.assertIn("skipped duplicate (DOI): Duplicate Paper", stdout.getvalue())
+        self.assertIn("done: would_create=0 skipped=1", stdout.getvalue())
+
+    def test_collect_skips_existing_title_duplicate(self):
+        args, input_patch = self.collect_args({"title": "Known Paper"})
+
+        with (
+            input_patch,
+            patch.object(
+                paper_worker,
+                "query_database",
+                return_value=[collect_page("Known   Paper", **{"Paper Key": "legacy-key"})],
+            ),
+            patch.object(paper_worker, "database_property_type", return_value="select"),
+            patch.object(paper_worker, "create_page") as create_page,
+            patch("sys.stdout", new_callable=io.StringIO) as stdout,
+        ):
+            exit_code = paper_worker.command_collect(args)
+
+        self.assertEqual(exit_code, 0)
+        create_page.assert_not_called()
+        self.assertIn("skipped duplicate (Title): Known Paper", stdout.getvalue())
+
+    def test_collect_skips_duplicate_within_same_input_by_paper_key(self):
+        args, input_patch = self.collect_args([{"title": "Same Title"}, {"title": "Same  Title"}])
+
+        with (
+            input_patch,
+            patch.object(paper_worker, "query_database", return_value=[]),
+            patch.object(paper_worker, "database_property_type", return_value="select"),
+            patch.object(paper_worker, "create_page") as create_page,
+            patch("sys.stdout", new_callable=io.StringIO) as stdout,
+        ):
+            exit_code = paper_worker.command_collect(args)
+
+        self.assertEqual(exit_code, 0)
+        create_page.assert_not_called()
+        self.assertIn("would collect: Same Title [title-same-title]", stdout.getvalue())
+        self.assertIn("skipped duplicate (Paper Key): Same  Title", stdout.getvalue())
 
 
 class ProjectItemUpdateTests(unittest.TestCase):
