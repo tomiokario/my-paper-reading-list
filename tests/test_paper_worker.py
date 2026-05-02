@@ -455,6 +455,16 @@ class ShowCommandTests(unittest.TestCase):
         self.assertIs(result, page)
         self.assertEqual(reason, "Source URL")
 
+    def test_find_page_for_show_matches_stored_source_url_trailing_slash_variant(self):
+        page = show_page()
+        page["properties"]["Source URL"]["url"] = "https://example.com/paper/"
+
+        with patch.object(paper_worker, "query_database", return_value=[page]):
+            result, reason = paper_worker.find_page_for_show("https://example.com/paper")
+
+        self.assertIs(result, page)
+        self.assertEqual(reason, "Source URL")
+
     def test_find_page_for_show_matches_notion_page_id_without_database_scan(self):
         page = show_page()
 

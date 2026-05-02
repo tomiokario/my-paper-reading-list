@@ -449,9 +449,14 @@ def show_url_variants(value: str) -> list[str]:
     normalized_issue_url = normalize_github_issue_url(raw)
     if normalized_issue_url and normalized_issue_url not in variants:
         variants.append(normalized_issue_url)
-    without_trailing_slash = raw.rstrip("/")
-    if without_trailing_slash and without_trailing_slash not in variants:
-        variants.append(without_trailing_slash)
+    for candidate in list(variants):
+        without_trailing_slash = candidate.rstrip("/")
+        if without_trailing_slash and without_trailing_slash not in variants:
+            variants.append(without_trailing_slash)
+        if candidate and not candidate.endswith("/"):
+            with_trailing_slash = candidate + "/"
+            if with_trailing_slash not in variants:
+                variants.append(with_trailing_slash)
     return variants
 
 
