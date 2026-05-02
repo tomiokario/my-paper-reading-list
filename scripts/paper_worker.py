@@ -574,6 +574,39 @@ def command_prepare(args: argparse.Namespace) -> int:
     return 1 if failures else 0
 
 
+def retry_reason(page: dict[str, Any]) -> str:
+    tags = get_multi_select(page, "Process Tags")
+    if tags:
+        return ", ".join(tags)
+    return "no process tags"
+
+
+def command_retry(args: argparse.Namespace) -> int:
+    pages = query_database(
+        status_filter("Error"),
+        page_size=min(args.limit, 100),
+        max_results=args.limit,
+    )
+    if not pages:
+        print("No papers with Status = Error.")
+        return 0
+
+    failures = 0
+    for page in pages[: args.limit]:
+        title = get_title(page) or page["id"]
+        if args.dry_run:
+            print(f"would retry: {title} ({retry_reason(page)})")
+            continue
+        try:
+            print(prepare_page(page, dry_run=False, skip_download=args.skip_download))
+        except Exception as exc:
+            print(f"failed: {title}: {exc}", file=sys.stderr)
+            failures += 1
+            if not args.keep_going:
+                return 1
+    return 1 if failures else 0
+
+
 def command_status(args: argparse.Namespace) -> int:
     page_size = 100 if args.limit is None else min(args.limit, 100)
     pages = query_database(page_size=page_size, max_results=args.limit)
@@ -980,6 +1013,14 @@ def build_parser() -> argparse.ArgumentParser:
     prepare.add_argument("--skip-download", action="store_true")
     prepare.add_argument("--keep-going", action="store_true")
     prepare.set_defaults(func=command_prepare)
+
+    retry = subparsers.add_parser("retry", help="Retry failed paper processing")
+    retry.add_argument("--failed", action="store_true", required=True, help="Retry papers with Status = Error")
+    retry.add_argument("--limit", type=int, default=10)
+    retry.add_argument("--dry-run", action="store_true")
+    retry.add_argument("--skip-download", action="store_true")
+    retry.add_argument("--keep-going", action="store_true")
+    retry.set_defaults(func=command_retry)
 
     import_issues = subparsers.add_parser("import-github-issues", help="Import GitHub issues into Notion")
     import_issues.add_argument("--repo", default=None)

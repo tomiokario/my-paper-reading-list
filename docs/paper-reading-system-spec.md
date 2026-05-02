@@ -235,6 +235,19 @@ paper-worker status
 paper-worker show paper-id
 ```
 
+### `paper-worker retry --failed` の初期版方針
+
+`paper-worker retry --failed` は、Notion の `Status = Error` の論文カードを再実行対象にする。
+`--dry-run` では Notion 更新やローカル書き込みを行わず、`would retry: <title> (<Process Tags>)`
+の形式で対象と理由を表示する。
+
+初期版では `Process Tags` ごとに別の処理エンジンへ振り分けず、`pdf_download_failed`、
+`pdf_missing`、`needs_manual_check`、空タグのいずれも `prepare` と同じ準備処理を再利用する。
+再実行後の `Status`、`Process Tags`、`Error Message`、`Last Processed` は既存の準備処理が更新する。
+
+`--keep-going` を指定しない場合は最初の失敗で終了コード 1 として停止する。`--keep-going` を
+指定した場合は残りの対象を続行し、最後に 1 件でも失敗があれば終了コード 1 を返す。
+
 ユーザーが困った場合は、Codex に CLI の出力やログを確認させて修正を依頼する。
 
 ## エラー処理

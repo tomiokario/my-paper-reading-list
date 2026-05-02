@@ -62,6 +62,18 @@ Prepare papers:
 python scripts\paper_worker.py prepare
 ```
 
+Preview failed papers that would be retried:
+
+```powershell
+python scripts\paper_worker.py retry --failed --dry-run
+```
+
+Retry failed papers:
+
+```powershell
+python scripts\paper_worker.py retry --failed --keep-going
+```
+
 Show status counts:
 
 ```powershell
@@ -86,6 +98,7 @@ python scripts\paper_worker.py sync-github-project --owner owner --project-numbe
 ## Notes
 
 - The CLI currently creates the local folder, `metadata.json`, `notes.md`, and downloads `paper.pdf` when `PDF URL` is present.
+- `retry --failed` initially targets Notion cards with `Status = Error` and reuses the same preparation flow as `prepare`. It shows `Process Tags` in dry-run output, but does not yet dispatch separate recovery logic per tag.
 - GitHub Projects sync uses the GitHub CLI, so `gh` must be installed and authenticated with `project`.
 - Full text extraction and translation are planned next.
 - Notion IDs and tokens must stay in `.env` or another local-only configuration file.
