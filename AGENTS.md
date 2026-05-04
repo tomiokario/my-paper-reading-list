@@ -47,6 +47,18 @@ Issue に対応するときは、以下の役割分担を使います。
 
 worktree は repository 内の gitignored な `tmp/worktrees/` に作ります。
 
+## 並列 PR 対応
+
+複数 Pull Request を同時に処理する場合は、`docs/technical/parallel-pr-workflow.md` に従います。
+
+基本方針:
+
+- open PR を mergeability、conflict、review 状態、置き換え関係で分類する。
+- PR を更新、統合、close する前に、元 Issue / 元 PR の意図と acceptance criteria を確認する。
+- conflict 解消では片方の内容を機械的に捨てず、どの意図をどこに残すかを明示する。
+- 置き換え PR では本文に `## 置き換える PR` 節を置き、置き換え元 PR / Issue の closing reference を書く。
+- review comment へ対応した場合は、妥当性判断、修正または非対応理由、reaction、返信を thread 単位で行う。
+
 ## Validation Profiles
 
 変更タイプごとの主な確認観点:
