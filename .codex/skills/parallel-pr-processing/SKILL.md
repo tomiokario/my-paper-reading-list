@@ -16,7 +16,7 @@ Use `docs/technical/parallel-pr-workflow.md` as the detailed source of truth.
 - Keep one management thread responsible for PR inventory, dependency ordering, mergeability, review status, and cleanup.
 - Preserve the original Issue / PR intent before changing or replacing a PR.
 - Do not flatten several PRs into one integration PR unless the replacement relationship is explicit.
-- Use replacement PR closing references in the integration PR body before merge.
+- Use closing references for replaced Issues, but close replaced PRs explicitly with a superseded comment.
 - For every actionable review comment, either fix it or explain why it is not accepted; react and reply after handling it.
 - Keep private data, Notion database IDs, tokens, PDFs, extracted text, translations, personal notes, logs, and machine-specific paths out of tracked files.
 
@@ -67,13 +67,17 @@ When several PRs conflict in nearby files:
    ```markdown
    ## 置き換える PR
 
-   PR #NNN に内容を統合したため、merge 時に以下を close する。
+   PR #NNN に内容を統合したため、以下の PR を superseded として close する。
 
-   Closes #123
-   Closes #124
+   - #123
+   - #124
+
+   ## 対応 Issue
+
+   Closes #122
    ```
 
-5. If the integration PR has already merged and closing references did not fire, comment on the replaced PRs with the superseded reason and close them manually.
+5. Before or immediately after merge, comment on the replaced PRs with the superseded reason and close them manually. Do not rely on GitHub closing keywords to close PRs.
 
 ## Review Handling
 
@@ -93,5 +97,5 @@ After a PR is merged:
 2. Pull latest `origin/main`.
 3. Delete the local working branch if it still exists.
 4. Delete the remote branch if it still exists and was not already removed by GitHub.
-5. Confirm replaced PRs are closed or explicitly left open with a reason.
+5. Confirm replaced PRs are closed with a superseded comment or explicitly left open with a reason.
 6. Report merged PRs, closed PRs, validation, Codex review status, and remaining risks.

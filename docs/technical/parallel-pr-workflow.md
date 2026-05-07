@@ -92,13 +92,17 @@ docs conflict の場合は片方を捨てず、次を確認する。
 ```markdown
 ## 置き換える PR
 
-PR #129 に内容を統合したため、merge 時に以下を close する。
+PR #129 に内容を統合したため、以下の PR を superseded として close する。
 
-Closes #123
-Closes #124
+- #123
+- #124
+
+## 対応 Issue
+
+Closes #122
 ```
 
-merge 前に closing reference を入れる。merge 後に気づいた場合は、自動 close は発火しないことがあるため、統合先 PR に記録を残し、置き換え元 PR に superseded コメントを残して close する。
+GitHub の closing keyword は Issue を close するための仕組みとして扱う。置き換え元 PR は自動 close を前提にせず、統合先 PR に記録を残し、置き換え元 PR に superseded コメントを残して明示的に close する。
 
 ## Review Comment 対応
 
@@ -136,6 +140,6 @@ GitHub の `--delete-branch` で remote branch が削除済みの場合は、存
 - validation profile に沿う検証が済んでいる
 - intent review と fresh pre PR review が通っている
 - PR title / body が日本語で、validation と review status を含んでいる
-- 置き換え PR では closing reference が本文にある
+- 置き換え PR では置き換え元 PR と対応 Issue が本文にある
 - GitHub Codex review が `+1` / no-major-issues に到達している
 - merge 後 cleanup または残タスクが明記されている
