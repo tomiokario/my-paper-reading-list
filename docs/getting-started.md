@@ -93,6 +93,8 @@ The CLI will create folders like:
     paper-id\
       metadata.json
       paper.pdf
+      extracted.txt
+      summary.ja.md
       notes.md
 ```
 
@@ -178,9 +180,11 @@ python scripts\paper_worker.py sync-github-project --owner owner --project-numbe
 
 ## Notes
 
-- The CLI currently creates the local folder, `metadata.json`, `notes.md`, and downloads `paper.pdf` when `PDF URL` is present.
+- The CLI currently creates the local folder, `metadata.json`, `notes.md`, downloads `paper.pdf` when `PDF URL` is present, extracts `extracted.txt` from an available PDF, and creates a `summary.ja.md` stub.
+- `prepare` refreshes `extracted.txt` from `paper.pdf` when it runs. It creates `summary.ja.md` only when the file does not already exist, so manually written summaries are not overwritten.
+- If PDF text extraction fails, the CLI sets `Status = Error`, adds `pdf_text_extract_failed` and `needs_manual_check` to `Process Tags`, and records a diagnostic `Error Message`.
 - GitHub Projects sync uses the GitHub CLI, so `gh` must be installed and authenticated with `project`.
-- Full text extraction, summary generation, translation, retry, diagnostic display, and background operation are planned in the linked issues in the README.
+- Full summary generation, translation, retry, diagnostic display, and background operation are planned in the linked issues in the README.
 - Notion IDs and tokens must stay in `.env` or another local-only configuration file.
 - PDF files, extracted text, translations, personal notes, logs, and machine-specific paths must stay in private data storage or local-only files, not in tracked repository files.
 - When reading Japanese Markdown in PowerShell, use `Get-Content -Encoding utf8`; see [PowerShell UTF-8 Reading Check](technical/powershell-utf8-reading.md).

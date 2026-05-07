@@ -1,7 +1,10 @@
 import argparse
 import io
 import os
+import shutil
+import uuid
 import unittest
+from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -21,6 +24,18 @@ def notion_page(issue_number, issue_url="", status="", status_type="select"):
             "Status": status_property,
         },
     }
+
+
+@contextmanager
+def temporary_workspace_dir():
+    root = Path(__file__).resolve().parents[1] / "tmp" / "unit-tests"
+    root.mkdir(parents=True, exist_ok=True)
+    path = root / f"case-{uuid.uuid4().hex}"
+    path.mkdir()
+    try:
+        yield str(path)
+    finally:
+        shutil.rmtree(path, ignore_errors=True)
 
 
 class GitHubIssueResolutionTests(unittest.TestCase):
@@ -326,6 +341,128 @@ class PrepareCommandTests(unittest.TestCase):
 
 
 class PreparePageTests(unittest.TestCase):
+    def test_prepare_text_artifacts_writes_extracted_text_and_summary_stub(self):
+        page = notion_page(1, status="Want to read")
+
+        with temporary_workspace_dir() as tmp:
+            paper_dir = Path(tmp)
+            pdf_path = paper_dir / "paper.pdf"
+            pdf_path.write_bytes(b"%PDF-1.4\n")
+
+            with patch.object(paper_worker, "extract_pdf_text", return_value="extracted body\n"):
+                paper_worker.prepare_text_artifacts(page, paper_dir, pdf_path)
+
+            self.assertEqual((paper_dir / "extracted.txt").read_text(encoding="utf-8"), "extracted body\n")
+            summary = (paper_dir / "summary.ja.md").read_text(encoding="utf-8")
+            self.assertIn(f"# {paper_worker.paper_key(page)}", summary)
+            self.assertIn("TODO: extracted.txt", summary)
+            self.assertIn("Do not overwrite summary.ja.md", summary)
+
+    def test_summary_stub_does_not_overwrite_existing_summary(self):
+        page = notion_page(1, status="Want to read")
+
+        with temporary_workspace_dir() as tmp:
+            paper_dir = Path(tmp)
+            summary_path = paper_dir / "summary.ja.md"
+            summary_path.write_text("manual summary\n", encoding="utf-8")
+
+            paper_worker.write_summary_stub(page, paper_dir)
+
+            self.assertEqual(summary_path.read_text(encoding="utf-8"), "manual summary\n")
+
+    def test_prepare_with_existing_pdf_runs_text_artifact_generation(self):
+        page = {
+            **notion_page(1, status="Want to read"),
+            "properties": {
+                **notion_page(1, status="Want to read")["properties"],
+                "PDF URL": {"type": "url", "url": "https://example.com/paper.pdf"},
+            },
+        }
+
+        with temporary_workspace_dir() as tmp:
+            target_dir = Path(tmp)
+            pdf_path = target_dir / "paper.pdf"
+            pdf_path.write_bytes(b"%PDF-1.4\n")
+
+            with (
+                patch.object(paper_worker, "paper_dir_for", return_value=target_dir),
+                patch.object(paper_worker, "write_initial_files") as write_initial_files,
+                patch.object(paper_worker, "download_pdf") as download_pdf,
+                patch.object(paper_worker, "prepare_text_artifacts") as prepare_text_artifacts,
+                patch.object(paper_worker, "update_page") as update_page,
+            ):
+                result = paper_worker.prepare_page(page, dry_run=False, skip_download=True)
+
+            self.assertIn("prepared:", result)
+            write_initial_files.assert_called_once_with(page, target_dir)
+            download_pdf.assert_not_called()
+            prepare_text_artifacts.assert_called_once_with(page, target_dir, pdf_path)
+            final_properties = update_page.call_args_list[-1].args[1]
+            self.assertEqual(final_properties["Status"], {"select": {"name": "Ready to read"}})
+            self.assertEqual(final_properties["Process Tags"], {"multi_select": []})
+
+    def test_prepare_with_existing_pdf_without_pdf_url_runs_text_artifact_generation(self):
+        page = notion_page(1, status="Want to read")
+
+        with temporary_workspace_dir() as tmp:
+            target_dir = Path(tmp)
+            pdf_path = target_dir / "paper.pdf"
+            pdf_path.write_bytes(b"%PDF-1.4\n")
+
+            with (
+                patch.object(paper_worker, "paper_dir_for", return_value=target_dir),
+                patch.object(paper_worker, "write_initial_files") as write_initial_files,
+                patch.object(paper_worker, "download_pdf") as download_pdf,
+                patch.object(paper_worker, "prepare_text_artifacts") as prepare_text_artifacts,
+                patch.object(paper_worker, "update_page") as update_page,
+            ):
+                result = paper_worker.prepare_page(page, dry_run=False, skip_download=True)
+
+            self.assertIn("prepared:", result)
+            write_initial_files.assert_called_once_with(page, target_dir)
+            download_pdf.assert_not_called()
+            prepare_text_artifacts.assert_called_once_with(page, target_dir, pdf_path)
+            final_properties = update_page.call_args_list[-1].args[1]
+            self.assertEqual(final_properties["Status"], {"select": {"name": "Ready to read"}})
+            self.assertEqual(final_properties["Process Tags"], {"multi_select": []})
+
+    def test_prepare_records_text_extraction_failure_on_notion_page(self):
+        page = {
+            **notion_page(1, status="Want to read"),
+            "properties": {
+                **notion_page(1, status="Want to read")["properties"],
+                "PDF URL": {"type": "url", "url": "https://example.com/paper.pdf"},
+            },
+        }
+
+        with temporary_workspace_dir() as tmp:
+            target_dir = Path(tmp)
+            (target_dir / "paper.pdf").write_bytes(b"%PDF-1.4\n")
+            failure = paper_worker.PaperPreparationFailure(
+                "PDF text extraction failed for paper.pdf: no text",
+                ["pdf_text_extract_failed", "needs_manual_check"],
+            )
+
+            with (
+                patch.object(paper_worker, "paper_dir_for", return_value=target_dir),
+                patch.object(paper_worker, "write_initial_files"),
+                patch.object(paper_worker, "prepare_text_artifacts", side_effect=failure),
+                patch.object(paper_worker, "update_page") as update_page,
+            ):
+                with self.assertRaises(paper_worker.PaperPreparationFailure):
+                    paper_worker.prepare_page(page, dry_run=False, skip_download=True)
+
+            final_properties = update_page.call_args_list[-1].args[1]
+            self.assertEqual(final_properties["Status"], {"select": {"name": "Error"}})
+            self.assertEqual(
+                final_properties["Process Tags"],
+                {"multi_select": [{"name": "pdf_text_extract_failed"}, {"name": "needs_manual_check"}]},
+            )
+            self.assertEqual(
+                final_properties["Error Message"],
+                {"rich_text": [{"type": "text", "text": {"content": str(failure)}}]},
+            )
+
     def test_prepare_without_pdf_url_keeps_metadata_ready_for_manual_pdf(self):
         page = notion_page(1, status="Want to read")
 

@@ -273,7 +273,7 @@ Implemented commands:
 | Command | Current behavior |
 | --- | --- |
 | `status` | Shows Notion paper status counts. |
-| `prepare` | Prepares `Want to read` papers by creating private local files and downloading `paper.pdf` when `PDF URL` is present. |
+| `prepare` | Prepares `Want to read` papers by creating private local files, downloading `paper.pdf` when `PDF URL` is present, extracting `extracted.txt` from an available PDF, and creating a `summary.ja.md` stub without overwriting an existing summary. |
 | `import-github-issues` | Imports GitHub Issues into Notion paper cards. |
 | `sync-github-project` | Syncs GitHub Projects status and priority into imported Notion cards. |
 
@@ -282,7 +282,7 @@ Planned commands and dependent workflow work:
 | Planned item | Tracking issue |
 | --- | --- |
 | `collect` | [#110](https://github.com/tomiokario/my-paper-reading-list/issues/110) |
-| PDF text extraction and `summary.ja.md` | [#111](https://github.com/tomiokario/my-paper-reading-list/issues/111) |
+| Full Japanese summary generation from `extracted.txt` | future issue |
 | `translate` | [#112](https://github.com/tomiokario/my-paper-reading-list/issues/112) |
 | `retry --failed` | [#113](https://github.com/tomiokario/my-paper-reading-list/issues/113) |
 | background `prepare --keep-going` operation | [#114](https://github.com/tomiokario/my-paper-reading-list/issues/114) |
