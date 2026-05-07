@@ -35,16 +35,7 @@ Create or update the Notion `Paper Inbox` database with these required propertie
 | Process Tags | Multi-select |
 | Error Message | Rich text |
 | Last Processed | Date |
-
-If you import GitHub Issues or sync GitHub Projects, also add:
-
-| Property | Type |
-| --- | --- |
-| GitHub Issue Number | Number |
-| GitHub Issue URL | URL |
-| Original Issue State | Select |
 | Paper Key | Rich text |
-| English Title | Rich text |
 | Authors | Rich text |
 | Year | Number |
 | Venue | Rich text |
@@ -58,6 +49,15 @@ If you import GitHub Issues or sync GitHub Projects, also add:
 | Priority | Select |
 | Tags | Multi-select |
 | OA Status | Select |
+
+If you import GitHub Issues or sync GitHub Projects, also add:
+
+| Property | Type |
+| --- | --- |
+| GitHub Issue Number | Number |
+| GitHub Issue URL | URL |
+| Original Issue State | Select |
+| English Title | Rich text |
 
 Set `Status` options for normal operation:
 
