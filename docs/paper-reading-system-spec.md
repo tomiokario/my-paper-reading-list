@@ -54,34 +54,50 @@ Notion では、論文1本を1つのカードとして扱う。
 
 論文カードには、読むかどうかを判断するための軽量な情報だけを置く。
 
-- title
-- authors
-- year
-- venue
-- source
-- DOI
-- arXiv ID
-- PDF URL
-- 3行概要
-- なぜ候補に入ったか
-- 自分の関心に近そうな点
-- priority
-- tags
-- status
-- GitHub Issue Number
-- GitHub Issue URL
-- Original Issue State
-- OA Status
-- local folder
-- process tags
-- error message
-- last processed
+### 必須プロパティ
+
+Notion database には、以下のプロパティを用意する。プロパティ名はスクリプトが参照するため、大文字小文字と空白を含めてこの表に合わせる。
+
+| Property | Notion type | 用途 |
+| --- | --- | --- |
+| Title | Title | 論文カードの表示名。 |
+| Status | Status または Select | 論文の運用状態。新規作成時は Notion の Status 型を推奨する。既存 database が Select 型の場合も互換として扱う。 |
+| PDF URL | URL | PDF を直接取得できる URL。空でもよい。 |
+| Local Folder | Rich text | private data storage 内のローカル作業フォルダ。 |
+| Process Tags | Multi-select | `pdf_missing`、`pdf_download_failed`、`needs_manual_check` などの処理タグ。 |
+| Error Message | Rich text | 最後に失敗した処理の理由。正常終了時は空にする。 |
+| Last Processed | Date | 最後に CLI または Codex が処理した日時。 |
+
+GitHub Issue からの import や GitHub Projects sync を使う場合は、以下も必須とする。
+
+| Property | Notion type | 用途 |
+| --- | --- | --- |
+| GitHub Issue Number | Number | 取り込み元 Issue 番号。 |
+| GitHub Issue URL | URL | 取り込み元 Issue URL。重複検出にも使う。 |
+| Original Issue State | Select | 取り込み時点の GitHub Issue state。 |
+| Paper Key | Rich text | ローカルフォルダ名を安定させるためのキー。 |
+| English Title | Rich text | Issue 本文などから抽出した英語タイトル。 |
+| Authors | Rich text | 著者。 |
+| Year | Number | 発行年。 |
+| Venue | Rich text | 会議、ジャーナル、プレプリントサーバーなど。 |
+| DOI | Rich text | DOI。 |
+| arXiv ID | Rich text | arXiv identifier。 |
+| Source | Rich text | 候補の入口や取り込み元。 |
+| Source URL | URL | 論文ページ、OA ページ、Issue 本文中の参照先など。 |
+| Short Summary JA | Rich text | 短い日本語概要。 |
+| Reason | Rich text | なぜ候補に入ったか。 |
+| Relevance Note | Rich text | 自分の関心に近そうな点。 |
+| Priority | Select | 読む優先度。 |
+| Tags | Multi-select | トピックや GitHub label 由来のタグ。 |
+| OA Status | Select | OA 判定。`gold`、`green`、`bronze`、`hybrid`、`closed`、`unknown` を使う。 |
+
+既存カードに互換性を持たせるため、データ移行ではカードを作り直さず、足りないプロパティを database に追加してから既存値を埋める。`Status` が Select 型の既存 database はそのまま運用できるが、新規 database では Status 型を使う。旧表記の `status`、`local folder`、`process tags`、`error message`、`last processed` などがある場合は、値をそれぞれ `Status`、`Local Folder`、`Process Tags`、`Error Message`、`Last Processed` へ移す。移行が終わるまで旧プロパティを残してもよいが、スクリプトから参照する正本は上記の英語名とする。
 
 PDF、全文抽出テキスト、全文対訳、詳細な個人メモは Notion に置かない。これらは private data storage に保存する。
 
 ## 論文カードの状態
 
-Notion の論文カードには `status` を持たせる。
+Notion の論文カードには `Status` を持たせる。
 
 | Status | 意味 |
 | --- | --- |
@@ -97,7 +113,18 @@ Notion の論文カードには `status` を持たせる。
 
 `Want to read` は、ユーザーが「この論文は読む価値がありそうなので、PDF取得や対訳生成まで進めてよい」と判断した印である。
 
-Codex は `Want to read` の論文を見つけると、処理開始時に `Preparing` に変更する。成功したら `Ready to read` に変更する。失敗したら `Error` に変更し、失敗理由を `process tags` と `error message` に残す。
+Codex は `Want to read` の論文を見つけると、処理開始時に `Preparing` に変更する。成功したら `Ready to read` に変更する。失敗したら `Error` に変更し、失敗理由を `Process Tags` と `Error Message` に残す。
+
+`Want to read`、`Preparing`、`Ready to read`、`Error` は、ローカル準備作業の中核状態として次のように運用する。
+
+| Status | 運用 |
+| --- | --- |
+| Want to read | ユーザーが準備を許可した状態。CLI の `prepare` はこの状態だけを処理対象にする。PDF URL が空でもカードは対象になり、ローカルフォルダ、metadata、notes を作る。 |
+| Preparing | CLI または Codex が処理中であることを示す一時状態。開始時に `Local Folder` と `Last Processed` を更新する。 |
+| Ready to read | 読むための最低限の準備が終わった状態。PDF がない場合でも、手動確認が必要なタグを残したうえで到達できる。 |
+| Error | 自動処理が失敗した状態。`Process Tags`、`Error Message`、`Last Processed` を必ず更新し、Error ビューで確認できるようにする。 |
+
+GitHub Projects sync が `Inbox`、`Later`、`Want to read` などへ戻す情報を持っていても、`Preparing`、`Ready to read`、`Reading`、`Error` のようなローカル作業状態を不用意に上書きしない。既存カードの作業状態は、ユーザーまたは明示的な再同期操作で変更する。
 
 ## Public repository と private data の境界
 
@@ -235,6 +262,38 @@ paper-worker status
 paper-worker show paper-id
 ```
 
+## CLI implementation status
+
+This specification includes target commands that are not all implemented yet.
+The current public implementation status is summarized in
+[../README.md](../README.md#cli-command-status).
+
+Implemented commands:
+
+| Command | Current behavior |
+| --- | --- |
+| `status` | Shows Notion paper status counts. |
+| `prepare` | Prepares `Want to read` papers by creating private local files and downloading `paper.pdf` when `PDF URL` is present. |
+| `import-github-issues` | Imports GitHub Issues into Notion paper cards. |
+| `sync-github-project` | Syncs GitHub Projects status and priority into imported Notion cards. |
+
+Planned commands and dependent workflow work:
+
+| Planned item | Tracking issue |
+| --- | --- |
+| `collect` | [#110](https://github.com/tomiokario/my-paper-reading-list/issues/110) |
+| PDF text extraction and `summary.ja.md` | [#111](https://github.com/tomiokario/my-paper-reading-list/issues/111) |
+| `translate` | [#112](https://github.com/tomiokario/my-paper-reading-list/issues/112) |
+| `retry --failed` | [#113](https://github.com/tomiokario/my-paper-reading-list/issues/113) |
+| background `prepare --keep-going` operation | [#114](https://github.com/tomiokario/my-paper-reading-list/issues/114) |
+| `show paper-id` | [#115](https://github.com/tomiokario/my-paper-reading-list/issues/115) |
+| Notion Error view and schema docs | [#116](https://github.com/tomiokario/my-paper-reading-list/issues/116) |
+
+Planned items must not be documented as available CLI behavior until their tracking
+issues are implemented. Private data boundaries still apply: PDFs, extracted text,
+translations, personal notes, logs, Notion database IDs, API tokens, sync state, and
+machine-specific paths stay outside tracked repository files.
+
 ユーザーが困った場合は、Codex に CLI の出力やログを確認させて修正を依頼する。
 
 ## エラー処理
@@ -251,6 +310,14 @@ Last Processed = 2026-05-01 11:30
 ```
 
 Notion には `Error` の論文だけを見るビューを作る。
+
+Error ビューの要件:
+
+- view 名は `Error` とする。
+- filter は `Status` が `Error` と等しいカードだけにする。
+- 表示プロパティは少なくとも `Title`、`Status`、`Process Tags`、`Error Message`、`PDF URL`、`Local Folder`、`Last Processed` を含める。
+- `Last Processed` の降順で並べ、直近の失敗を先頭に出す。
+- このビューは失敗調査と再実行判断の入口であり、PDF、全文抽出テキスト、全文対訳、詳細メモ、Notion database ID、API token は表示にも本文にも置かない。
 
 詳細確認や再実行は Codex が CLI を使って行う。
 
