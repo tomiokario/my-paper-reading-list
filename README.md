@@ -61,19 +61,24 @@ Implemented commands:
 | Command | Status | Notes |
 | --- | --- | --- |
 | `status` | Implemented | Shows Notion paper status counts. |
-| `prepare` | Implemented | Prepares `Want to read` papers by creating the private local folder, `metadata.json`, `notes.md`, and downloading `paper.pdf` when `PDF URL` is present. |
+| `prepare` | Implemented | Prepares `Want to read` papers by creating private local files, downloading `paper.pdf` when `PDF URL` is present, extracting `extracted.txt` from an available PDF, and creating a `summary.ja.md` stub without overwriting an existing summary. |
+| `collect` | Implemented | Creates Notion Inbox cards from a local candidate JSON file, with dry-run support and duplicate checks by DOI, arXiv ID, Source URL, Paper Key, and Title. |
 | `import-github-issues` | Implemented | Imports GitHub Issues into Notion paper cards. |
 | `sync-github-project` | Implemented | Syncs GitHub Projects status and priority into imported Notion cards. |
+
+Implemented operational workflows:
+
+| Workflow | Status | Notes |
+| --- | --- | --- |
+| Background `prepare --keep-going` operation | Documented | Uses Windows Scheduled Task as the initial runner. Logs stay in private data storage or local-only storage, and failures are investigated with Notion `Error` fields plus logs. |
 
 Planned commands and workflow work:
 
 | Planned item | Tracking issue | Notes |
 | --- | --- | --- |
-| `collect` | [#110](https://github.com/tomiokario/my-paper-reading-list/issues/110) | Add an entry point for candidate papers into the Notion Inbox. |
-| PDF text extraction and `summary.ja.md` | [#111](https://github.com/tomiokario/my-paper-reading-list/issues/111) | Generate private extracted text and summary files after PDF download. |
+| Full Japanese summary generation from `extracted.txt` | future issue | Generate a real Japanese summary after private extracted text exists. |
 | `translate` | [#112](https://github.com/tomiokario/my-paper-reading-list/issues/112) | Generate full parallel translations from private extracted text. |
 | `retry --failed` | [#113](https://github.com/tomiokario/my-paper-reading-list/issues/113) | Re-run failed paper processing based on Notion status and process tags. |
-| Background `prepare --keep-going` operation | [#114](https://github.com/tomiokario/my-paper-reading-list/issues/114) | Decide and document scheduled execution without storing local secrets or paths. |
 | `show paper-id` | [#115](https://github.com/tomiokario/my-paper-reading-list/issues/115) | Inspect a paper card and private local file presence without printing private file bodies. |
 | Notion Error view and schema docs | [#116](https://github.com/tomiokario/my-paper-reading-list/issues/116) | Document required database properties, views, and compatibility notes. |
 

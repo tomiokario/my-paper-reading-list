@@ -47,6 +47,25 @@ PR ごとに次を記録する。
 
 同じファイルや同じ仕様境界を触る PR は、同時に別々の方向へ進めない。順番に main へ取り込むか、統合 PR で一度に整理する。
 
+## 全 PR 処理ランブック
+
+ユーザーが「現在届いている PR を処理して merge する」「すべての PR を merge できたら片付ける」と依頼した場合は、次を標準手順にする。
+
+1. `git status --short --branch` と `gh pr list --state open ...` で main と open PR の状態を確認する。
+2. 先に workflow / review / cleanup ルール変更が依頼されている場合は、このドキュメント、`AGENTS.md`、関連 skill を更新してから PR 処理へ進む。
+3. open PR を merge しやすさ、依存関係、触るファイル、元 Issue の意図で並べる。docs-only や clean な PR を先に入れ、同じ実装ファイルを触る PR は main に取り込む順番を明示する。
+4. 対象 PR ごとに元 Issue / PR 本文 / 変更ファイル / review comment を確認し、落としてはいけない intent を短く整理する。
+5. 対象 PR の worktree で最新 `origin/main` を merge し、conflict があれば片方を機械的に捨てず、元 intent と main 側の既存変更を両方満たす形に直す。
+6. 変更後は validation profile に沿って検証する。script 変更なら focused unit test と dry-run 相当、docs 変更なら矛盾や planned/implemented の整合を確認する。
+7. commit / push の前に intent review と fresh pre PR review を行う。blocker が出た場合は修正して該当 review を再実行する。
+8. push 後、妥当な review comment には `+1` reaction と返信を付け、妥当でない comment には reaction を付けず理由を返信する。
+9. `@codex review` を依頼し、GitHub Codex review が `+1` / no-major-issues になるまで、指摘対応、validation、intent review、fresh pre PR review、commit、push を繰り返す。
+10. PR が clean / mergeable で、最新 head に対する no-major-issues が確認できたら merge する。
+11. merge 後は main を pull し、該当 worktree と local branch を削除し、remote branch が残っていれば削除する。
+12. open PR inventory を取り直し、次の PR へ進む。
+
+処理中に自分が作っていない差分や追加 commit を見つけた場合は、ユーザーまたは別エージェントの変更として扱う。巻き戻さず、対象 PR の intent に沿うか確認し、必要なら validation と review gate を通して取り込む。
+
 ## 元の意図を逃さない確認
 
 PR を更新、置き換え、close する前に、必ず元の意図を短く整理する。
@@ -131,6 +150,14 @@ git push origin --delete <merged-branch>
 GitHub の `--delete-branch` で remote branch が削除済みの場合は、存在確認だけでよい。
 
 置き換え元 PR がある場合は、閉じたこと、または閉じない理由を最終報告に含める。
+
+すべての対象 PR を merge または明示的に close / defer した後は、最後に一括 cleanup を行う。
+
+- `main` に戻り、`git pull --ff-only origin main` で最新化する。
+- `git worktree list` で merge 済み PR の worktree が残っていないか確認し、残っていれば `git worktree remove` する。
+- `git branch` と `git branch -r` で merge 済み branch が残っていないか確認し、残っていれば local / remote の順で削除する。
+- `gh pr list --state open` で未処理 PR が残っていないか確認する。残す PR がある場合は理由を最終報告に書く。
+- 最終報告には merged PR、closed / deferred PR、validation、Codex review status、cleanup 結果、残リスクを含める。
 
 ## 完了条件
 

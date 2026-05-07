@@ -19,6 +19,7 @@ Use `docs/technical/parallel-pr-workflow.md` as the detailed source of truth.
 - Use closing references for replaced Issues, but close replaced PRs explicitly with a superseded comment.
 - For every actionable review comment, either fix it or explain why it is not accepted; react and reply after handling it.
 - Keep private data, Notion database IDs, tokens, PDFs, extracted text, translations, personal notes, logs, and machine-specific paths out of tracked files.
+- When the user asks to process all current PRs, follow the runbook in `docs/technical/parallel-pr-workflow.md`: inventory, order, refresh against `main`, validate, run intent/fresh reviews, handle Codex comments with reactions/replies, merge, cleanup, then repeat until no target PR remains.
 
 ## Inventory
 
@@ -99,3 +100,10 @@ After a PR is merged:
 4. Delete the remote branch if it still exists and was not already removed by GitHub.
 5. Confirm replaced PRs are closed with a superseded comment or explicitly left open with a reason.
 6. Report merged PRs, closed PRs, validation, Codex review status, and remaining risks.
+
+After all target PRs are merged, closed, or explicitly deferred:
+
+1. Pull latest `main`.
+2. Prune merged worktrees and local branches.
+3. Confirm remote branches for merged PRs are gone.
+4. Re-run open PR inventory and report any remaining PRs with reasons.
