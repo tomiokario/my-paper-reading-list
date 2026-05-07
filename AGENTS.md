@@ -47,6 +47,18 @@ Issue に対応するときは、以下の役割分担を使います。
 
 worktree は repository 内の gitignored な `tmp/worktrees/` に作ります。
 
+## 並列 PR 対応
+
+複数 Pull Request を同時に処理する場合は、`docs/technical/parallel-pr-workflow.md` に従います。
+
+基本方針:
+
+- open PR を mergeability、conflict、review 状態、置き換え関係で分類する。
+- PR を更新、統合、close する前に、元 Issue / 元 PR の意図と acceptance criteria を確認する。
+- conflict 解消では片方の内容を機械的に捨てず、どの意図をどこに残すかを明示する。
+- 置き換え PR では本文に `## 置き換える PR` 節を置き、置き換え元 PR を明記する。元 Issue は closing reference で閉じ、置き換え元 PR は superseded コメント付きで明示的に close する。
+- review comment へ対応した場合は、妥当性判断、修正または非対応理由、reaction、返信を thread 単位で行う。
+
 ## Validation Profiles
 
 変更タイプごとの主な確認観点:
@@ -118,18 +130,22 @@ literal form.
 
 複数 PR の内容を統合した置き換え PR を作る場合は、置き換え元 PR を本文に明記する。
 
-本文には以下のような節を置き、merge 時に GitHub が対象 PR / Issue を自動 close できるよう closing reference を書く。
+本文には以下のような節を置く。GitHub の closing keyword は元 Issue を close するために使い、置き換え元 PR は superseded コメント付きで明示的に close する。
 
 ```markdown
 ## 置き換える PR
 
-PR #129 に内容を統合したため、merge 時に以下を close する。
+PR #129 に内容を統合したため、以下の PR を superseded として close する。
 
-Closes #123
-Closes #124
+- #123
+- #124
+
+## 対応 Issue
+
+Closes #122
 ```
 
-すでに統合 PR を merge 済みで closing reference が自動発火しない場合は、統合先 PR の本文やコメントに記録を残し、置き換え元 PR へ superseded 理由をコメントして close する。
+置き換え元 PR を close する場合は、統合先 PR の本文やコメントに記録を残し、置き換え元 PR へ superseded 理由をコメントして close する。
 
 ## Process Update Rule
 
