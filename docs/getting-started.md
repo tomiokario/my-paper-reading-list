@@ -94,6 +94,7 @@ The CLI will create folders like:
       metadata.json
       paper.pdf
       notes.md
+  logs\
 ```
 
 ## 4. Add Test Papers in Notion
@@ -154,14 +155,17 @@ local-only files, not in `candidates.json` or tracked docs.
 Preview what would happen:
 
 ```powershell
-python scripts\paper_worker.py prepare --dry-run
+python scripts\paper_worker.py prepare --dry-run --keep-going
 ```
 
 Prepare papers:
 
 ```powershell
-python scripts\paper_worker.py prepare
+python scripts\paper_worker.py prepare --keep-going
 ```
+
+Use `--skip-download` when you want the scheduled run to create metadata and
+notes but avoid downloading PDFs until you have inspected the cards manually.
 
 Show status counts:
 
@@ -169,7 +173,65 @@ Show status counts:
 python scripts\paper_worker.py status
 ```
 
-## 6. Import Gmail Google Scholar Alerts into Notion
+## 6. Schedule Background Prepare on Windows
+
+Use Windows Scheduled Task as the initial background runner. This keeps the
+public repository tool-agnostic and does not require storing Notion tokens,
+database IDs, or machine-specific paths in tracked files.
+
+Before creating the task, run the safe preview manually:
+
+```powershell
+python scripts\paper_worker.py prepare --dry-run --keep-going
+```
+
+Inspect the output and the Notion cards it would touch. Enable the scheduled
+task only after the dry-run result is expected.
+
+Create a Windows Scheduled Task with these settings:
+
+- Trigger: a cadence you are comfortable with, such as daily or hourly.
+- Program/script: `powershell.exe`
+- Start in: your local clone root for this repository.
+- Run only when the user is logged on, unless your local credential and storage
+  setup is ready for unattended execution.
+
+Use this action while validating the task:
+
+```powershell
+-NoProfile -ExecutionPolicy Bypass -Command "New-Item -ItemType Directory -Force (Join-Path $env:PAPER_READING_DATA_ROOT 'logs') | Out-Null; python scripts\paper_worker.py prepare --dry-run --keep-going *>> (Join-Path $env:PAPER_READING_DATA_ROOT 'logs\prepare-task.log')"
+```
+
+After the scheduled dry-run log looks correct, change the action to:
+
+```powershell
+-NoProfile -ExecutionPolicy Bypass -Command "New-Item -ItemType Directory -Force (Join-Path $env:PAPER_READING_DATA_ROOT 'logs') | Out-Null; python scripts\paper_worker.py prepare --keep-going *>> (Join-Path $env:PAPER_READING_DATA_ROOT 'logs\prepare-task.log')"
+```
+
+The task account must be able to read the local `.env` file from the repository
+root. `PAPER_READING_DATA_ROOT` must also be visible to the scheduled PowerShell
+process because the log path is resolved before Python loads `.env`.
+
+Keep the log under private data storage, for example:
+
+```text
+%PAPER_READING_DATA_ROOT%\logs\prepare-task.log
+```
+
+Do not commit that log or any resolved local path.
+
+If a run fails, check both places:
+
+- Notion `Error` view for `Status`, `Process Tags`, `Error Message`, and
+  `Last Processed`.
+- `%PAPER_READING_DATA_ROOT%\logs\prepare-task.log` for the CLI output and
+  stack context needed for investigation.
+
+`prepare --keep-going` continues with other `Want to read` cards after a card
+fails, but the task may still exit non-zero when any failure occurred. Failed
+cards should be visible in the Notion `Error` view with investigation details.
+
+## 7. Import Gmail Google Scholar Alerts into Notion
 
 The current Google Scholar alert intake creates Notion paper cards, not GitHub
 Issues. The Apps Script automation reads labeled Gmail messages, extracts paper
@@ -197,7 +259,7 @@ the importer again. A Gmail message should be marked read only after all paper
 candidates from that message are handled successfully. If Notion creation fails,
 leave the message unread so the import can be retried after fixing the problem.
 
-## 7. Migrate Legacy GitHub Issues into Notion
+## 8. Migrate Legacy GitHub Issues into Notion
 
 Older docs under `docs/legacy/` describe the previous GitHub Issues / Projects
 workflow. For current operation, Notion paper cards are the source of truth. Use
@@ -221,7 +283,8 @@ python scripts\paper_worker.py sync-github-project --owner owner --project-numbe
 - The CLI currently creates the local folder, `metadata.json`, `notes.md`, and downloads `paper.pdf` when `PDF URL` is present.
 - `collect` creates Notion Inbox cards only; it does not download PDFs or write private data.
 - GitHub Projects sync uses the GitHub CLI, so `gh` must be installed and authenticated with `project`.
-- Full text extraction, summary generation, translation, retry, diagnostic display, and background operation are planned in the linked issues in the README.
+- Full text extraction, summary generation, translation, retry, and diagnostic display are planned in the linked issues in the README.
+- Background `prepare --keep-going` operation is documented for Windows Scheduled Task in this guide.
 - Notion IDs and tokens must stay in `.env` or another local-only configuration file.
 - PDF files, extracted text, translations, personal notes, logs, and machine-specific paths must stay in private data storage or local-only files, not in tracked repository files.
 - When reading Japanese Markdown in PowerShell, use `Get-Content -Encoding utf8`; see [PowerShell UTF-8 Reading Check](technical/powershell-utf8-reading.md).

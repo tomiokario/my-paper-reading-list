@@ -220,6 +220,28 @@ PDF が取得できた場合に行う作業:
 - 日本語概要を作る。
 - 全文対訳を生成する。
 
+### 定期実行
+
+初期版の定期実行方式は Windows Scheduled Task とする。Codex automation ではなく、Windows ユーザーがローカル PC 上で明示的に管理できる OS 標準のスケジューラを使う。
+
+Scheduled Task は repository root を作業ディレクトリにして、次の CLI を実行する。
+
+```powershell
+python scripts\paper_worker.py prepare --keep-going
+```
+
+有効化前には必ず dry-run で対象カードと出力を確認する。
+
+```powershell
+python scripts\paper_worker.py prepare --dry-run --keep-going
+```
+
+安全運用として、PDF ダウンロードをまだ走らせたくない期間は `--skip-download` を併用してよい。この場合も metadata と notes の準備、Notion の状態更新、手動確認用タグの確認を行う。
+
+実行ログは private data storage または local-only storage に保存し、public repository には置かない。推奨先は `PAPER_READING_DATA_ROOT` 配下の `logs\prepare-task.log` とする。tracked docs には token、database ID、実際の local absolute path、ログ本文を書かない。
+
+Scheduled Task で失敗した場合は、CLI が対象カードの `Status` を `Error` にし、`Process Tags`、`Error Message`、`Last Processed` を更新する。調査時は Notion の `Error` ビューで失敗カードを確認し、同じ時刻帯の `logs\prepare-task.log` を private data storage 側で確認する。
+
 ### 全文対訳
 
 `Want to read` になった論文は、原則として全文対訳を生成する。
@@ -273,10 +295,16 @@ Implemented commands:
 | Command | Current behavior |
 | --- | --- |
 | `status` | Shows Notion paper status counts. |
-| `prepare` | Prepares `Want to read` papers by creating private local files and downloading `paper.pdf` when `PDF URL` is present. |
+| `prepare` | Prepares `Want to read` papers by creating private local files and downloading `paper.pdf` when `PDF URL` is present. Supports dry-run, keep-going, and skip-download operation for scheduled use. |
 | `collect` | Creates Notion Inbox cards from a local candidate JSON file, with dry-run support and duplicate checks by DOI, arXiv ID, Source URL, Paper Key, and Title. |
 | `import-github-issues` | Imports GitHub Issues into Notion paper cards. |
 | `sync-github-project` | Syncs GitHub Projects status and priority into imported Notion cards. |
+
+Implemented operational workflows:
+
+| Workflow | Current behavior |
+| --- | --- |
+| background `prepare --keep-going` operation | Uses Windows Scheduled Task as the documented initial runner. The task writes logs under private data storage or local-only storage and relies on the CLI to update Notion `Error` fields on failure. |
 
 Planned commands and dependent workflow work:
 
@@ -285,7 +313,6 @@ Planned commands and dependent workflow work:
 | PDF text extraction and `summary.ja.md` | [#111](https://github.com/tomiokario/my-paper-reading-list/issues/111) |
 | `translate` | [#112](https://github.com/tomiokario/my-paper-reading-list/issues/112) |
 | `retry --failed` | [#113](https://github.com/tomiokario/my-paper-reading-list/issues/113) |
-| background `prepare --keep-going` operation | [#114](https://github.com/tomiokario/my-paper-reading-list/issues/114) |
 | `show paper-id` | [#115](https://github.com/tomiokario/my-paper-reading-list/issues/115) |
 | Notion Error view and schema docs | [#116](https://github.com/tomiokario/my-paper-reading-list/issues/116) |
 
