@@ -274,6 +274,7 @@ Implemented commands:
 | --- | --- |
 | `status` | Shows Notion paper status counts. |
 | `prepare` | Prepares `Want to read` papers by creating private local files and downloading `paper.pdf` when `PDF URL` is present. |
+| `collect` | Creates Notion Inbox cards from a local candidate JSON file, with dry-run support and duplicate checks by DOI, arXiv ID, Source URL, Paper Key, and Title. |
 | `import-github-issues` | Imports GitHub Issues into Notion paper cards. |
 | `sync-github-project` | Syncs GitHub Projects status and priority into imported Notion cards. |
 
@@ -281,7 +282,6 @@ Planned commands and dependent workflow work:
 
 | Planned item | Tracking issue |
 | --- | --- |
-| `collect` | [#110](https://github.com/tomiokario/my-paper-reading-list/issues/110) |
 | PDF text extraction and `summary.ja.md` | [#111](https://github.com/tomiokario/my-paper-reading-list/issues/111) |
 | `translate` | [#112](https://github.com/tomiokario/my-paper-reading-list/issues/112) |
 | `retry --failed` | [#113](https://github.com/tomiokario/my-paper-reading-list/issues/113) |
@@ -400,3 +400,69 @@ Codex は以下に使う。
 5. Codex によるローカル作業は手動依頼にするか、定期的に確認する運用にするか。
 6. PDF 取得は OA のみとするか、ユーザーが手動で入れた PDF も対象にするか。
 7. 関連論文整理はいつから必要か。
+
+## `paper-worker collect` initial contract
+
+`paper-worker collect` is the first CLI entry point for registering candidate papers in the Notion
+Paper Inbox. It accepts a local JSON file and does not require or store PDF files, extracted text,
+translation output, Notion database IDs, tokens, or private data in tracked files.
+
+Command shape:
+
+```powershell
+python scripts\paper_worker.py collect --input candidates.json --dry-run
+python scripts\paper_worker.py collect --input candidates.json
+```
+
+The input file is either a single JSON object or an array of objects. `title` is required. Optional
+fields are:
+
+```text
+source_url or url
+pdf_url
+doi
+arxiv_id
+authors
+year
+venue
+summary_ja
+reason
+relevance_note
+priority
+tags
+source
+```
+
+`tags` can be a JSON array or a comma-separated string. `priority` and each normalized tag must not
+contain commas because Notion select and multi-select option names do not allow commas.
+
+Example:
+
+```json
+{
+  "title": "Example Paper",
+  "source_url": "https://doi.org/10.1234/example",
+  "pdf_url": "https://example.com/paper.pdf",
+  "authors": ["A. Researcher", "B. Author"],
+  "year": 2026,
+  "venue": "ExampleConf",
+  "summary_ja": "Short Japanese summary",
+  "reason": "Why this should be considered",
+  "relevance_note": "How this connects to the reading list",
+  "priority": "Medium",
+  "tags": ["survey"],
+  "source": "manual"
+}
+```
+
+Created Notion cards use `Status = Inbox`. `Paper Key` is generated from the first available stable
+identifier in this order: DOI, arXiv ID, Source URL, then title.
+
+Duplicate policy:
+
+- Before creating cards, `collect` indexes existing Notion pages.
+- It skips candidates that match an existing page by DOI, arXiv ID, Source URL, Paper Key, or Title.
+- It also adds each planned or created candidate to the in-memory index, so duplicates inside one
+  input file are skipped.
+- `--dry-run` still performs the duplicate check, prints `would collect` for planned cards, and
+  prints `skipped duplicate` for skipped cards without creating Notion pages.
