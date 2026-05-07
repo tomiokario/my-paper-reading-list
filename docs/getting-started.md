@@ -93,6 +93,8 @@ The CLI will create folders like:
     paper-id\
       metadata.json
       paper.pdf
+      extracted.txt
+      summary.ja.md
       notes.md
   logs\
 ```
@@ -280,10 +282,12 @@ python scripts\paper_worker.py sync-github-project --owner owner --project-numbe
 
 ## Notes
 
-- The CLI currently creates the local folder, `metadata.json`, `notes.md`, and downloads `paper.pdf` when `PDF URL` is present.
+- The CLI currently creates the local folder, `metadata.json`, `notes.md`, downloads `paper.pdf` when `PDF URL` is present, extracts `extracted.txt` from an available PDF, and creates a `summary.ja.md` stub.
+- `prepare` refreshes `extracted.txt` from `paper.pdf` when it runs. It creates `summary.ja.md` only when the file does not already exist, so manually written summaries are not overwritten.
+- If PDF text extraction fails, the CLI sets `Status = Error`, adds `pdf_text_extract_failed` and `needs_manual_check` to `Process Tags`, and records a diagnostic `Error Message`.
 - `collect` creates Notion Inbox cards only; it does not download PDFs or write private data.
 - GitHub Projects sync uses the GitHub CLI, so `gh` must be installed and authenticated with `project`.
-- Full text extraction, summary generation, translation, retry, and diagnostic display are planned in the linked issues in the README.
+- Full Japanese summary generation, translation, retry, and diagnostic display are planned in the linked issues in the README.
 - Background `prepare --keep-going` operation is documented for Windows Scheduled Task in this guide.
 - Notion IDs and tokens must stay in `.env` or another local-only configuration file.
 - PDF files, extracted text, translations, personal notes, logs, and machine-specific paths must stay in private data storage or local-only files, not in tracked repository files.

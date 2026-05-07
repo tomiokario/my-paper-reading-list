@@ -13,9 +13,11 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import hashlib
+import importlib.util
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import urllib.error
@@ -50,6 +52,12 @@ DEMOTING_PROJECT_TARGETS = {"Inbox", "Later", "Want to read"}
 
 class PaperWorkerError(RuntimeError):
     pass
+
+
+class PaperPreparationFailure(PaperWorkerError):
+    def __init__(self, message: str, process_tags: list[str]) -> None:
+        super().__init__(message)
+        self.process_tags = process_tags
 
 
 def load_dotenv(path: Path) -> None:
@@ -462,6 +470,119 @@ def download_pdf(pdf_url: str, destination: Path) -> None:
     destination.write_bytes(data)
 
 
+def extract_text_with_pypdf(pdf_path: Path) -> str:
+    try:
+        from pypdf import PdfReader
+
+        reader = PdfReader(str(pdf_path))
+        parts = []
+        for index, page in enumerate(reader.pages, start=1):
+            try:
+                text = page.extract_text() or ""
+            except Exception as exc:
+                raise PaperWorkerError(f"pypdf failed on page {index}: {exc}") from exc
+            if text.strip():
+                parts.append(text.strip())
+    except PaperWorkerError:
+        raise
+    except Exception as exc:
+        raise PaperWorkerError(f"pypdf failed to read PDF: {exc}") from exc
+
+    text = "\n\n".join(parts).strip()
+    if not text:
+        raise PaperWorkerError("pypdf extracted no text from PDF")
+    return text + "\n"
+
+
+def extract_text_with_pdftotext(pdf_path: Path) -> str:
+    executable = shutil.which("pdftotext")
+    if not executable:
+        raise PaperWorkerError("pdftotext is not installed or not on PATH")
+
+    completed = subprocess.run(
+        [executable, "-layout", str(pdf_path), "-"],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+        encoding="utf-8",
+        errors="replace",
+    )
+    if completed.returncode != 0:
+        detail = (completed.stderr or completed.stdout).strip()
+        raise PaperWorkerError(f"pdftotext failed with exit code {completed.returncode}: {detail}")
+
+    text = completed.stdout.strip()
+    if not text:
+        raise PaperWorkerError("pdftotext extracted no text from PDF")
+    return text + "\n"
+
+
+def extract_pdf_text(pdf_path: Path) -> str:
+    errors = []
+    if importlib.util.find_spec("pypdf") is not None:
+        try:
+            return extract_text_with_pypdf(pdf_path)
+        except PaperWorkerError as exc:
+            errors.append(str(exc))
+    else:
+        errors.append("pypdf is not installed")
+
+    if shutil.which("pdftotext"):
+        try:
+            return extract_text_with_pdftotext(pdf_path)
+        except PaperWorkerError as exc:
+            errors.append(str(exc))
+    else:
+        errors.append("pdftotext is not installed or not on PATH")
+
+    detail = "; ".join(error for error in errors if error)
+    raise PaperPreparationFailure(
+        f"PDF text extraction failed for {pdf_path.name}: {detail}",
+        ["pdf_text_extract_failed", "needs_manual_check"],
+    )
+
+
+def write_summary_stub(page: dict[str, Any], paper_dir: Path) -> Path:
+    summary_path = paper_dir / "summary.ja.md"
+    if summary_path.exists():
+        return summary_path
+
+    title = get_title(page) or paper_key(page)
+    todo = "TODO: extracted.txt \u3092\u3082\u3068\u306b\u65e5\u672c\u8a9e\u6982\u8981\u3092\u751f\u6210\u3059\u308b\u3002"
+    summary_path.write_text(
+        "\n".join(
+            [
+                f"# {title}",
+                "",
+                todo,
+                "",
+                "## Regeneration Policy",
+                "",
+                "- Refresh extracted.txt by re-running PDF text extraction from paper.pdf.",
+                "- Do not overwrite summary.ja.md when it already exists.",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    return summary_path
+
+
+def prepare_text_artifacts(page: dict[str, Any], paper_dir: Path, pdf_path: Path) -> None:
+    extracted_path = paper_dir / "extracted.txt"
+    try:
+        extracted_path.write_text(extract_pdf_text(pdf_path), encoding="utf-8")
+        write_summary_stub(page, paper_dir)
+    except PaperPreparationFailure:
+        raise
+    except Exception as exc:
+        raise PaperPreparationFailure(
+            f"PDF text artifact generation failed: {exc}",
+            ["pdf_text_extract_failed", "needs_manual_check"],
+        ) from exc
+
+
 def write_initial_files(page: dict[str, Any], paper_dir: Path) -> None:
     paper_dir.mkdir(parents=True, exist_ok=True)
     metadata_path = paper_dir / "metadata.json"
@@ -497,7 +618,8 @@ def prepare_page(page: dict[str, Any], dry_run: bool = False, skip_download: boo
 
     try:
         write_initial_files(page, target_dir)
-        if not pdf_url:
+        pdf_path = target_dir / "paper.pdf"
+        if not pdf_url and not pdf_path.exists():
             update_page(
                 page_id,
                 {
@@ -510,7 +632,6 @@ def prepare_page(page: dict[str, Any], dry_run: bool = False, skip_download: boo
             )
             return f"prepared without PDF: {title} -> {target_dir}"
 
-        pdf_path = target_dir / "paper.pdf"
         if skip_download and not pdf_path.exists():
             update_page(
                 page_id,
@@ -527,6 +648,8 @@ def prepare_page(page: dict[str, Any], dry_run: bool = False, skip_download: boo
         if not skip_download and not pdf_path.exists():
             download_pdf(pdf_url, pdf_path)
 
+        prepare_text_artifacts(page, target_dir, pdf_path)
+
         update_page(
             page_id,
             {
@@ -539,13 +662,16 @@ def prepare_page(page: dict[str, Any], dry_run: bool = False, skip_download: boo
         )
         return f"prepared: {title} -> {target_dir}"
     except Exception as exc:
-        tag = "pdf_missing" if not pdf_url else "pdf_download_failed"
+        process_tags = getattr(exc, "process_tags", None)
+        if not process_tags:
+            tag = "pdf_missing" if not pdf_url else "pdf_download_failed"
+            process_tags = [tag, "needs_manual_check"]
         update_page(
             page_id,
             {
                 "Status": status_value("Error", page),
                 "Local Folder": rich_text(str(target_dir)),
-                "Process Tags": multi_select([tag, "needs_manual_check"]),
+                "Process Tags": multi_select(process_tags),
                 "Error Message": rich_text(str(exc)),
                 "Last Processed": date_value(dt.datetime.now(dt.timezone.utc)),
             },

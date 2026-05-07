@@ -295,7 +295,7 @@ Implemented commands:
 | Command | Current behavior |
 | --- | --- |
 | `status` | Shows Notion paper status counts. |
-| `prepare` | Prepares `Want to read` papers by creating private local files and downloading `paper.pdf` when `PDF URL` is present. Supports dry-run, keep-going, and skip-download operation for scheduled use. |
+| `prepare` | Prepares `Want to read` papers by creating private local files, downloading `paper.pdf` when `PDF URL` is present, extracting `extracted.txt` from an available PDF, creating a `summary.ja.md` stub without overwriting an existing summary, and supporting dry-run, keep-going, and skip-download operation for scheduled use. |
 | `collect` | Creates Notion Inbox cards from a local candidate JSON file, with dry-run support and duplicate checks by DOI, arXiv ID, Source URL, Paper Key, and Title. |
 | `import-github-issues` | Imports GitHub Issues into Notion paper cards. |
 | `sync-github-project` | Syncs GitHub Projects status and priority into imported Notion cards. |
@@ -310,7 +310,7 @@ Planned commands and dependent workflow work:
 
 | Planned item | Tracking issue |
 | --- | --- |
-| PDF text extraction and `summary.ja.md` | [#111](https://github.com/tomiokario/my-paper-reading-list/issues/111) |
+| Full Japanese summary generation from `extracted.txt` | future issue |
 | `translate` | [#112](https://github.com/tomiokario/my-paper-reading-list/issues/112) |
 | `retry --failed` | [#113](https://github.com/tomiokario/my-paper-reading-list/issues/113) |
 | `show paper-id` | [#115](https://github.com/tomiokario/my-paper-reading-list/issues/115) |
