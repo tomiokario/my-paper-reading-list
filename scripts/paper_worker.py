@@ -841,7 +841,8 @@ def collect_paper_key(record: dict[str, Any]) -> str:
     if record.get("arxiv_id"):
         return "arxiv-" + slugify(record["arxiv_id"])
     if record.get("source_url"):
-        return "url-" + slugify(record["source_url"])
+        url_hash = hashlib.sha1(record["source_url"].encode("utf-8")).hexdigest()[:8]
+        return f"url-{slugify(record['source_url'])}-{url_hash}"
     return "title-" + slugify(record["title"])
 
 
@@ -883,8 +884,9 @@ def collect_record_to_properties(record: dict[str, Any]) -> dict[str, Any]:
     return properties
 
 
-def normalize_duplicate_value(value: str) -> str:
-    return re.sub(r"\s+", " ", (value or "").strip()).lower()
+def normalize_duplicate_value(value: str, *, case_sensitive: bool = False) -> str:
+    normalized = re.sub(r"\s+", " ", (value or "").strip())
+    return normalized if case_sensitive else normalized.lower()
 
 
 def collect_duplicate_keys(record: dict[str, Any]) -> list[tuple[str, str]]:
@@ -897,7 +899,7 @@ def collect_duplicate_keys(record: dict[str, Any]) -> list[tuple[str, str]]:
     ]
     keys: list[tuple[str, str]] = []
     for label, value in candidates:
-        normalized = normalize_duplicate_value(value)
+        normalized = normalize_duplicate_value(value, case_sensitive=label == "Source URL")
         if normalized:
             keys.append((label, f"{label}:{normalized}"))
     return keys
@@ -905,9 +907,10 @@ def collect_duplicate_keys(record: dict[str, Any]) -> list[tuple[str, str]]:
 
 def collect_page_duplicate_keys(page: dict[str, Any]) -> list[tuple[str, str]]:
     source_url = get_text(page, "Source URL")
+    pdf_url = get_text(page, "PDF URL")
     record = {
-        "doi": normalize_collect_doi(get_text(page, "DOI"), source_url),
-        "arxiv_id": normalize_collect_arxiv_id(get_text(page, "arXiv ID"), source_url),
+        "doi": normalize_collect_doi(get_text(page, "DOI"), source_url, pdf_url),
+        "arxiv_id": normalize_collect_arxiv_id(get_text(page, "arXiv ID"), source_url, pdf_url),
         "source_url": source_url,
         "paper_key": get_text(page, "Paper Key"),
         "title": get_title(page),

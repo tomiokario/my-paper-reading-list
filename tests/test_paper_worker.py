@@ -546,6 +546,69 @@ class CollectCommandTests(unittest.TestCase):
         create_page.assert_not_called()
         self.assertIn("skipped duplicate (arXiv ID): Duplicate Paper", stdout.getvalue())
 
+    def test_collect_preserves_source_url_path_case_for_duplicate_key(self):
+        args, input_patch = self.collect_args(
+            [
+                {"title": "Upper Path", "source_url": "https://example.test/Paper"},
+                {"title": "Lower Path", "source_url": "https://example.test/paper"},
+            ]
+        )
+
+        with (
+            input_patch,
+            patch.object(paper_worker, "query_database", return_value=[]),
+            patch.object(paper_worker, "database_property_type", return_value="select"),
+            patch.object(paper_worker, "create_page") as create_page,
+            patch("sys.stdout", new_callable=io.StringIO) as stdout,
+        ):
+            exit_code = paper_worker.command_collect(args)
+
+        self.assertEqual(exit_code, 0)
+        create_page.assert_not_called()
+        self.assertIn("would collect: Upper Path [url-example.test-paper-", stdout.getvalue())
+        self.assertIn("would collect: Lower Path [url-example.test-paper-", stdout.getvalue())
+        self.assertIn("done: would_create=2 skipped=0", stdout.getvalue())
+
+    def test_collect_uses_existing_pdf_url_for_arxiv_duplicate(self):
+        args, input_patch = self.collect_args({"title": "Duplicate PDF URL", "arxiv_id": "2601.00630"})
+
+        with (
+            input_patch,
+            patch.object(
+                paper_worker,
+                "query_database",
+                return_value=[collect_page("Existing", **{"PDF URL": "https://arxiv.org/pdf/2601.00630v2"})],
+            ),
+            patch.object(paper_worker, "database_property_type", return_value="select"),
+            patch.object(paper_worker, "create_page") as create_page,
+            patch("sys.stdout", new_callable=io.StringIO) as stdout,
+        ):
+            exit_code = paper_worker.command_collect(args)
+
+        self.assertEqual(exit_code, 0)
+        create_page.assert_not_called()
+        self.assertIn("skipped duplicate (arXiv ID): Duplicate PDF URL", stdout.getvalue())
+
+    def test_collect_uses_existing_pdf_url_for_doi_duplicate(self):
+        args, input_patch = self.collect_args({"title": "Duplicate DOI PDF URL", "doi": "10.5555/example"})
+
+        with (
+            input_patch,
+            patch.object(
+                paper_worker,
+                "query_database",
+                return_value=[collect_page("Existing", **{"PDF URL": "https://doi.org/10.5555/example"})],
+            ),
+            patch.object(paper_worker, "database_property_type", return_value="select"),
+            patch.object(paper_worker, "create_page") as create_page,
+            patch("sys.stdout", new_callable=io.StringIO) as stdout,
+        ):
+            exit_code = paper_worker.command_collect(args)
+
+        self.assertEqual(exit_code, 0)
+        create_page.assert_not_called()
+        self.assertIn("skipped duplicate (DOI): Duplicate DOI PDF URL", stdout.getvalue())
+
     def test_collect_skips_existing_title_duplicate(self):
         args, input_patch = self.collect_args({"title": "Known Paper"})
 
