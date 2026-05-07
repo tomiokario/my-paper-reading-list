@@ -48,6 +48,42 @@ Notion credentials and database IDs must stay out of tracked files. Use Google
 Apps Script Properties for Gmail/Scholar automation, or local-only settings such
 as `.env` for CLI work.
 
+## CLI Command Status
+
+Run implemented commands with:
+
+```powershell
+python scripts\paper_worker.py <command>
+```
+
+Implemented commands:
+
+| Command | Status | Notes |
+| --- | --- | --- |
+| `status` | Implemented | Shows Notion paper status counts. |
+| `prepare` | Implemented | Prepares `Want to read` papers by creating private local files, downloading `paper.pdf` when `PDF URL` is present, extracting `extracted.txt` from an available PDF, and creating a `summary.ja.md` stub without overwriting an existing summary. |
+| `collect` | Implemented | Creates Notion Inbox cards from a local candidate JSON file, with dry-run support and duplicate checks by DOI, arXiv ID, Source URL, Paper Key, and Title. |
+| `retry --failed` | Implemented | Re-runs failed paper processing for Notion cards with `Status = Error`; dry-run prints retry targets with `Process Tags`, and execution reuses the `prepare` flow. |
+| `show paper-id` | Implemented | Inspects a paper card and private local file presence without printing private file bodies. |
+| `import-github-issues` | Implemented | Imports GitHub Issues into Notion paper cards. |
+| `sync-github-project` | Implemented | Syncs GitHub Projects status and priority into imported Notion cards. |
+
+Implemented operational workflows:
+
+| Workflow | Status | Notes |
+| --- | --- | --- |
+| Background `prepare --keep-going` operation | Documented | Uses Windows Scheduled Task as the initial runner. Logs stay in private data storage or local-only storage, and failures are investigated with Notion `Error` fields plus logs. |
+
+Planned commands and workflow work:
+
+| Planned item | Tracking issue | Notes |
+| --- | --- | --- |
+| Full Japanese summary generation from `extracted.txt` | future issue | Generate a real Japanese summary after private extracted text exists. |
+| `translate` | [#112](https://github.com/tomiokario/my-paper-reading-list/issues/112) | Generate full parallel translations from private extracted text. |
+| Notion Error view and schema docs | [#116](https://github.com/tomiokario/my-paper-reading-list/issues/116) | Document required database properties, views, and compatibility notes. |
+
+Do not treat planned items as available CLI commands until their tracking issues are implemented. PDFs, extracted text, translations, personal notes, logs, Notion IDs, tokens, and machine-specific paths must stay outside tracked files.
+
 ## Getting Started
 
 See [docs/getting-started.md](docs/getting-started.md).
