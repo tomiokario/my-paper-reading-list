@@ -769,6 +769,10 @@ def validate_select_option_name(value: str, field_name: str) -> None:
         raise PaperWorkerError(f"{field_name} must not contain commas: {value}")
 
 
+def normalize_collect_doi(value: Any, *fallback_values: str) -> str:
+    return extract_doi(normalize_collect_string(value), *fallback_values)
+
+
 def normalize_collect_arxiv_id(value: Any, *fallback_values: str) -> str:
     text = normalize_collect_string(value)
     arxiv = extract_arxiv(text, *fallback_values)
@@ -808,10 +812,8 @@ def collect_record(raw: dict[str, Any]) -> dict[str, Any]:
     title = normalize_collect_string(raw.get("title"))
     source_url = first_url(normalize_collect_string(raw.get("source_url") or raw.get("url")))
     pdf_url = first_url(normalize_collect_string(raw.get("pdf_url")))
-    doi = extract_doi(normalize_collect_string(raw.get("doi")), source_url, pdf_url)
+    doi = normalize_collect_doi(raw.get("doi"), source_url, pdf_url)
     arxiv = normalize_collect_arxiv_id(raw.get("arxiv_id"), source_url, pdf_url)
-    if not doi:
-        doi = normalize_collect_string(raw.get("doi"))
 
     record: dict[str, Any] = {
         "title": title,
@@ -903,11 +905,8 @@ def collect_duplicate_keys(record: dict[str, Any]) -> list[tuple[str, str]]:
 
 def collect_page_duplicate_keys(page: dict[str, Any]) -> list[tuple[str, str]]:
     source_url = get_text(page, "Source URL")
-    doi = extract_doi(get_text(page, "DOI"), source_url)
-    if not doi:
-        doi = normalize_collect_string(get_text(page, "DOI"))
     record = {
-        "doi": doi,
+        "doi": normalize_collect_doi(get_text(page, "DOI"), source_url),
         "arxiv_id": normalize_collect_arxiv_id(get_text(page, "arXiv ID"), source_url),
         "source_url": source_url,
         "paper_key": get_text(page, "Paper Key"),

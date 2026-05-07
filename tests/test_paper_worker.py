@@ -446,6 +446,46 @@ class CollectCommandTests(unittest.TestCase):
         create_page.assert_not_called()
         self.assertIn("skipped duplicate (DOI): Duplicate Paper", stdout.getvalue())
 
+    def test_collect_ignores_placeholder_doi_for_duplicate_key(self):
+        args, input_patch = self.collect_args(
+            [
+                {"title": "First Placeholder DOI", "doi": "N/A"},
+                {"title": "Second Placeholder DOI", "doi": "unknown"},
+            ]
+        )
+
+        with (
+            input_patch,
+            patch.object(paper_worker, "query_database", return_value=[]),
+            patch.object(paper_worker, "database_property_type", return_value="select"),
+            patch.object(paper_worker, "create_page") as create_page,
+            patch("sys.stdout", new_callable=io.StringIO) as stdout,
+        ):
+            exit_code = paper_worker.command_collect(args)
+
+        self.assertEqual(exit_code, 0)
+        create_page.assert_not_called()
+        self.assertIn("would collect: First Placeholder DOI [title-first-placeholder-doi]", stdout.getvalue())
+        self.assertIn("would collect: Second Placeholder DOI [title-second-placeholder-doi]", stdout.getvalue())
+        self.assertIn("done: would_create=2 skipped=0", stdout.getvalue())
+
+    def test_collect_ignores_existing_placeholder_doi(self):
+        args, input_patch = self.collect_args({"title": "New Placeholder DOI", "doi": "N/A"})
+
+        with (
+            input_patch,
+            patch.object(paper_worker, "query_database", return_value=[collect_page("Existing", DOI="N/A")]),
+            patch.object(paper_worker, "database_property_type", return_value="select"),
+            patch.object(paper_worker, "create_page") as create_page,
+            patch("sys.stdout", new_callable=io.StringIO) as stdout,
+        ):
+            exit_code = paper_worker.command_collect(args)
+
+        self.assertEqual(exit_code, 0)
+        create_page.assert_not_called()
+        self.assertIn("would collect: New Placeholder DOI [title-new-placeholder-doi]", stdout.getvalue())
+        self.assertIn("done: would_create=1 skipped=0", stdout.getvalue())
+
     def test_collect_skips_existing_arxiv_version_duplicate(self):
         args, input_patch = self.collect_args({"title": "Duplicate Paper", "arxiv_id": "2601.00630"})
 
