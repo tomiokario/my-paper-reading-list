@@ -284,6 +284,19 @@ paper-worker status
 paper-worker show paper-id
 ```
 
+### `paper-worker retry --failed` の初期版方針
+
+`paper-worker retry --failed` は、Notion の `Status = Error` の論文カードを再実行対象にする。
+`--dry-run` では Notion 更新やローカル書き込みを行わず、`would retry: <title> (<Process Tags>)`
+の形式で対象と理由を表示する。
+
+初期版では `Process Tags` ごとに別の処理エンジンへ振り分けず、`pdf_download_failed`、
+`pdf_missing`、`needs_manual_check`、空タグのいずれも `prepare` と同じ準備処理を再利用する。
+再実行後の `Status`、`Process Tags`、`Error Message`、`Last Processed` は既存の準備処理が更新する。
+
+`--keep-going` を指定しない場合は最初の失敗で終了コード 1 として停止する。`--keep-going` を
+指定した場合は残りの対象を続行し、最後に 1 件でも失敗があれば終了コード 1 を返す。
+
 ## CLI implementation status
 
 This specification includes target commands that are not all implemented yet.
@@ -297,6 +310,7 @@ Implemented commands:
 | `status` | Shows Notion paper status counts. |
 | `prepare` | Prepares `Want to read` papers by creating private local files, downloading `paper.pdf` when `PDF URL` is present, extracting `extracted.txt` from an available PDF, creating a `summary.ja.md` stub without overwriting an existing summary, and supporting dry-run, keep-going, and skip-download operation for scheduled use. |
 | `collect` | Creates Notion Inbox cards from a local candidate JSON file, with dry-run support and duplicate checks by DOI, arXiv ID, Source URL, Paper Key, and Title. |
+| `retry --failed` | Retries Notion cards with `Status = Error` by reusing the same preparation flow as `prepare`; dry-run lists targets with `Process Tags`, and keep-going continues after per-card failures. |
 | `import-github-issues` | Imports GitHub Issues into Notion paper cards. |
 | `sync-github-project` | Syncs GitHub Projects status and priority into imported Notion cards. |
 
@@ -312,7 +326,6 @@ Planned commands and dependent workflow work:
 | --- | --- |
 | Full Japanese summary generation from `extracted.txt` | future issue |
 | `translate` | [#112](https://github.com/tomiokario/my-paper-reading-list/issues/112) |
-| `retry --failed` | [#113](https://github.com/tomiokario/my-paper-reading-list/issues/113) |
 | `show paper-id` | [#115](https://github.com/tomiokario/my-paper-reading-list/issues/115) |
 | Notion Error view and schema docs | [#116](https://github.com/tomiokario/my-paper-reading-list/issues/116) |
 

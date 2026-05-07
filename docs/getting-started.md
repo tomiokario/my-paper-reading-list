@@ -112,7 +112,7 @@ PDF URL = <direct PDF URL if available>
 
 ## 5. Run the CLI
 
-This section lists implemented commands only. Planned commands such as `translate`, `retry --failed`, and `show paper-id` are tracked in the README and should not be used until their issues are implemented.
+This section lists implemented commands only. Planned commands such as `translate` and `show paper-id` are tracked in the README and should not be used until their issues are implemented.
 
 Collect candidate papers into the Notion Inbox from a local JSON file:
 
@@ -168,6 +168,18 @@ python scripts\paper_worker.py prepare --keep-going
 
 Use `--skip-download` when you want the scheduled run to create metadata and
 notes but avoid downloading PDFs until you have inspected the cards manually.
+
+Preview failed papers that would be retried:
+
+```powershell
+python scripts\paper_worker.py retry --failed --dry-run
+```
+
+Retry failed papers:
+
+```powershell
+python scripts\paper_worker.py retry --failed --keep-going
+```
 
 Show status counts:
 
@@ -286,8 +298,9 @@ python scripts\paper_worker.py sync-github-project --owner owner --project-numbe
 - `prepare` refreshes `extracted.txt` from `paper.pdf` when it runs. It creates `summary.ja.md` only when the file does not already exist, so manually written summaries are not overwritten.
 - If PDF text extraction fails, the CLI sets `Status = Error`, adds `pdf_text_extract_failed` and `needs_manual_check` to `Process Tags`, and records a diagnostic `Error Message`.
 - `collect` creates Notion Inbox cards only; it does not download PDFs or write private data.
+- `retry --failed` targets Notion cards with `Status = Error` and reuses the same preparation flow as `prepare`. It shows `Process Tags` in dry-run output, but does not yet dispatch separate recovery logic per tag.
 - GitHub Projects sync uses the GitHub CLI, so `gh` must be installed and authenticated with `project`.
-- Full Japanese summary generation, translation, retry, and diagnostic display are planned in the linked issues in the README.
+- Full Japanese summary generation, translation, and diagnostic display are planned in the linked issues in the README.
 - Background `prepare --keep-going` operation is documented for Windows Scheduled Task in this guide.
 - Notion IDs and tokens must stay in `.env` or another local-only configuration file.
 - PDF files, extracted text, translations, personal notes, logs, and machine-specific paths must stay in private data storage or local-only files, not in tracked repository files.

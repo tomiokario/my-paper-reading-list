@@ -13,16 +13,24 @@ import scripts.paper_worker as paper_worker
 from scripts.paper_worker import normalize_github_issue_url, resolve_notion_issue_page
 
 
-def notion_page(issue_number, issue_url="", status="", status_type="select"):
+def notion_page(issue_number, issue_url="", status="", status_type="select", title="", process_tags=None):
     status_property = {"type": "status", "status": {"name": status} if status else None}
     if status_type == "select":
         status_property = {"type": "select", "select": {"name": status} if status else None}
     return {
         "id": f"page-{issue_number}-{issue_url or 'missing'}",
         "properties": {
+            "Title": {
+                "type": "title",
+                "title": [{"plain_text": title}] if title else [],
+            },
             "GitHub Issue Number": {"type": "number", "number": issue_number},
             "GitHub Issue URL": {"type": "url", "url": issue_url or None},
             "Status": status_property,
+            "Process Tags": {
+                "type": "multi_select",
+                "multi_select": [{"name": tag} for tag in (process_tags or [])],
+            },
         },
     }
 
@@ -804,6 +812,138 @@ class PrepareCommandTests(unittest.TestCase):
 
         self.assertEqual(exit_code, 1)
         self.assertEqual(prepare_page.call_count, 2)
+
+
+class RetryCommandTests(unittest.TestCase):
+    def test_retry_failed_uses_native_status_filter_when_schema_requires_it(self):
+        args = argparse.Namespace(
+            failed=True,
+            limit=2,
+            dry_run=True,
+            skip_download=False,
+            keep_going=False,
+        )
+
+        with (
+            patch.object(paper_worker, "database_property_type", return_value="status"),
+            patch.object(paper_worker, "query_database", return_value=[]) as query_database,
+            patch("sys.stdout", new_callable=io.StringIO),
+        ):
+            exit_code = paper_worker.command_retry(args)
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(
+            query_database.call_args.args[0],
+            {"property": "Status", "status": {"equals": "Error"}},
+        )
+
+    def test_retry_failed_dry_run_prints_retry_reason_without_preparing(self):
+        page = notion_page(
+            1,
+            status="Error",
+            title="Retryable Paper",
+            process_tags=["pdf_download_failed", "needs_manual_check"],
+        )
+        args = argparse.Namespace(
+            failed=True,
+            limit=10,
+            dry_run=True,
+            skip_download=False,
+            keep_going=False,
+        )
+
+        with (
+            patch.object(paper_worker, "database_property_type", return_value="select"),
+            patch.object(paper_worker, "query_database", return_value=[page]),
+            patch.object(paper_worker, "prepare_page") as prepare_page,
+            patch("sys.stdout", new_callable=io.StringIO) as stdout,
+        ):
+            exit_code = paper_worker.command_retry(args)
+
+        self.assertEqual(exit_code, 0)
+        self.assertIn(
+            "would retry: Retryable Paper (pdf_download_failed, needs_manual_check)",
+            stdout.getvalue(),
+        )
+        prepare_page.assert_not_called()
+
+    def test_retry_failed_executes_prepare_page_with_skip_download(self):
+        page = notion_page(1, status="Error")
+        args = argparse.Namespace(
+            failed=True,
+            limit=10,
+            dry_run=False,
+            skip_download=True,
+            keep_going=False,
+        )
+
+        with (
+            patch.object(paper_worker, "database_property_type", return_value="select"),
+            patch.object(paper_worker, "query_database", return_value=[page]),
+            patch.object(paper_worker, "prepare_page", return_value="prepared") as prepare_page,
+            patch("sys.stdout", new_callable=io.StringIO),
+        ):
+            exit_code = paper_worker.command_retry(args)
+
+        self.assertEqual(exit_code, 0)
+        prepare_page.assert_called_once_with(page, dry_run=False, skip_download=True)
+
+    def test_retry_failed_stops_after_first_failure_without_keep_going(self):
+        pages = [notion_page(1, status="Error"), notion_page(2, status="Error")]
+        args = argparse.Namespace(
+            failed=True,
+            limit=10,
+            dry_run=False,
+            skip_download=False,
+            keep_going=False,
+        )
+
+        with (
+            patch.object(paper_worker, "database_property_type", return_value="select"),
+            patch.object(paper_worker, "query_database", return_value=pages),
+            patch.object(paper_worker, "prepare_page", side_effect=RuntimeError("boom")) as prepare_page,
+            patch("sys.stdout", new_callable=io.StringIO),
+            patch("sys.stderr", new_callable=io.StringIO),
+        ):
+            exit_code = paper_worker.command_retry(args)
+
+        self.assertEqual(exit_code, 1)
+        self.assertEqual(prepare_page.call_count, 1)
+
+    def test_retry_failed_keep_going_returns_failure_after_any_failed_item(self):
+        pages = [notion_page(1, status="Error"), notion_page(2, status="Error")]
+        args = argparse.Namespace(
+            failed=True,
+            limit=10,
+            dry_run=False,
+            skip_download=False,
+            keep_going=True,
+        )
+
+        with (
+            patch.object(paper_worker, "database_property_type", return_value="select"),
+            patch.object(paper_worker, "query_database", return_value=pages),
+            patch.object(paper_worker, "prepare_page", side_effect=[RuntimeError("boom"), "prepared"]) as prepare_page,
+            patch("sys.stdout", new_callable=io.StringIO),
+            patch("sys.stderr", new_callable=io.StringIO),
+        ):
+            exit_code = paper_worker.command_retry(args)
+
+        self.assertEqual(exit_code, 1)
+        self.assertEqual(prepare_page.call_count, 2)
+
+    def test_retry_parser_requires_failed_flag(self):
+        parser = paper_worker.build_parser()
+
+        with (
+            self.assertRaises(SystemExit),
+            patch("sys.stderr", new_callable=io.StringIO),
+        ):
+            parser.parse_args(["retry"])
+
+        args = parser.parse_args(["retry", "--failed", "--dry-run"])
+        self.assertTrue(args.failed)
+        self.assertIs(args.func, paper_worker.command_retry)
 
 
 class PreparePageTests(unittest.TestCase):

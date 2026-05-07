@@ -63,6 +63,7 @@ Implemented commands:
 | `status` | Implemented | Shows Notion paper status counts. |
 | `prepare` | Implemented | Prepares `Want to read` papers by creating private local files, downloading `paper.pdf` when `PDF URL` is present, extracting `extracted.txt` from an available PDF, and creating a `summary.ja.md` stub without overwriting an existing summary. |
 | `collect` | Implemented | Creates Notion Inbox cards from a local candidate JSON file, with dry-run support and duplicate checks by DOI, arXiv ID, Source URL, Paper Key, and Title. |
+| `retry --failed` | Implemented | Re-runs failed paper processing for Notion cards with `Status = Error`; dry-run prints retry targets with `Process Tags`, and execution reuses the `prepare` flow. |
 | `import-github-issues` | Implemented | Imports GitHub Issues into Notion paper cards. |
 | `sync-github-project` | Implemented | Syncs GitHub Projects status and priority into imported Notion cards. |
 
@@ -78,7 +79,6 @@ Planned commands and workflow work:
 | --- | --- | --- |
 | Full Japanese summary generation from `extracted.txt` | future issue | Generate a real Japanese summary after private extracted text exists. |
 | `translate` | [#112](https://github.com/tomiokario/my-paper-reading-list/issues/112) | Generate full parallel translations from private extracted text. |
-| `retry --failed` | [#113](https://github.com/tomiokario/my-paper-reading-list/issues/113) | Re-run failed paper processing based on Notion status and process tags. |
 | `show paper-id` | [#115](https://github.com/tomiokario/my-paper-reading-list/issues/115) | Inspect a paper card and private local file presence without printing private file bodies. |
 | Notion Error view and schema docs | [#116](https://github.com/tomiokario/my-paper-reading-list/issues/116) | Document required database properties, views, and compatibility notes. |
 
