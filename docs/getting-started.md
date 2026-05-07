@@ -112,7 +112,7 @@ PDF URL = <direct PDF URL if available>
 
 ## 5. Run the CLI
 
-This section lists implemented commands only. Planned commands such as `translate` and `show paper-id` are tracked in the README and should not be used until their issues are implemented.
+This section lists implemented commands only. Planned commands such as `translate` are tracked in the README and should not be used until their issues are implemented.
 
 Collect candidate papers into the Notion Inbox from a local JSON file:
 
@@ -186,6 +186,14 @@ Show status counts:
 ```powershell
 python scripts\paper_worker.py status
 ```
+
+Inspect one Notion paper card and its local file readiness:
+
+```powershell
+python scripts\paper_worker.py show paper-id
+```
+
+`paper-id` can be a Paper Key or Notion page ID. The command prints selected Notion properties and whether expected local files such as `metadata.json`, `paper.pdf`, `extracted.txt`, `summary.ja.md`, and `translations/` exist. It does not print private file bodies or personal notes.
 
 ## 6. Schedule Background Prepare on Windows
 

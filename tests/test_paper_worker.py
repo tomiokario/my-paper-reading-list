@@ -1148,6 +1148,135 @@ class StatusCommandTests(unittest.TestCase):
         self.assertEqual(query_database.call_args.kwargs, {"page_size": 10, "max_results": 10})
 
 
+def show_page(local_folder="paper-dir"):
+    return {
+        "object": "page",
+        "id": "12345678-1234-1234-1234-123456789abc",
+        "properties": {
+            "Title": {"type": "title", "title": [{"plain_text": "Readable Paper"}]},
+            "Status": {"type": "select", "select": {"name": "Ready to read"}},
+            "Paper Key": {"type": "rich_text", "rich_text": [{"plain_text": "paper-key"}]},
+            "DOI": {"type": "rich_text", "rich_text": [{"plain_text": "10.1234/example"}]},
+            "arXiv ID": {"type": "rich_text", "rich_text": [{"plain_text": "2601.00630"}]},
+            "Source URL": {"type": "url", "url": "https://example.com/paper"},
+            "PDF URL": {"type": "url", "url": "https://example.com/paper.pdf"},
+            "GitHub Issue URL": {"type": "url", "url": "https://github.com/owner/repo/issues/7"},
+            "Local Folder": {"type": "rich_text", "rich_text": [{"plain_text": local_folder}] if local_folder else []},
+            "Process Tags": {"type": "multi_select", "multi_select": [{"name": "pdf_missing"}]},
+            "Error Message": {"type": "rich_text", "rich_text": [{"plain_text": "download failed"}]},
+        },
+    }
+
+
+class ShowCommandTests(unittest.TestCase):
+    def test_parser_accepts_show_subcommand(self):
+        args = paper_worker.build_parser().parse_args(["show", "paper-key"])
+
+        self.assertEqual(args.paper_id, "paper-key")
+        self.assertIs(args.func, paper_worker.command_show)
+
+    def test_find_page_for_show_matches_paper_key(self):
+        page = show_page()
+
+        with patch.object(paper_worker, "query_database", return_value=[page]) as query_database:
+            result, reason = paper_worker.find_page_for_show("paper-key")
+
+        self.assertIs(result, page)
+        self.assertEqual(reason, "Paper Key")
+        self.assertEqual(query_database.call_args.kwargs, {"page_size": 10, "max_results": 10})
+        self.assertEqual(
+            query_database.call_args.args[0]["or"][0],
+            {"property": "Paper Key", "rich_text": {"equals": "paper-key"}},
+        )
+
+    def test_find_page_for_show_matches_normalized_source_url_variant(self):
+        page = show_page()
+
+        with patch.object(paper_worker, "query_database", return_value=[page]):
+            result, reason = paper_worker.find_page_for_show("https://example.com/paper/")
+
+        self.assertIs(result, page)
+        self.assertEqual(reason, "Source URL")
+
+    def test_find_page_for_show_matches_stored_source_url_trailing_slash_variant(self):
+        page = show_page()
+        page["properties"]["Source URL"]["url"] = "https://example.com/paper/"
+
+        with patch.object(paper_worker, "query_database", return_value=[page]):
+            result, reason = paper_worker.find_page_for_show("https://example.com/paper")
+
+        self.assertIs(result, page)
+        self.assertEqual(reason, "Source URL")
+
+    def test_find_page_for_show_matches_notion_page_id_without_database_scan(self):
+        page = show_page()
+
+        with (
+            patch.object(paper_worker, "notion_request", return_value=page) as notion_request,
+            patch.object(paper_worker, "query_database") as query_database,
+        ):
+            result, reason = paper_worker.find_page_for_show("12345678123412341234123456789abc")
+
+        self.assertIs(result, page)
+        self.assertEqual(reason, "Notion page id")
+        notion_request.assert_called_once_with("GET", "/pages/12345678123412341234123456789abc")
+        query_database.assert_not_called()
+
+    def test_local_artifact_statuses_reports_expected_files_without_reading_contents(self):
+        def fake_is_file(path):
+            return path.name in {"metadata.json", "paper.pdf"}
+
+        def fake_is_dir(path):
+            return path.name == "translations"
+
+        with (
+            patch.object(Path, "is_file", fake_is_file),
+            patch.object(Path, "is_dir", fake_is_dir),
+            patch.object(Path, "read_text", side_effect=AssertionError("show must not read private files")),
+        ):
+            statuses = paper_worker.local_artifact_statuses(Path("paper-dir"))
+
+        self.assertEqual(
+            statuses,
+            [
+                ("metadata.json", "exists"),
+                ("paper.pdf", "exists"),
+                ("extracted.txt", "missing"),
+                ("summary.ja.md", "missing"),
+                ("translations/", "exists"),
+            ],
+        )
+
+    def test_command_show_prints_properties_and_file_existence_only(self):
+        page = show_page(local_folder="paper-dir")
+
+        with (
+            patch.object(paper_worker, "find_page_for_show", return_value=(page, "Paper Key")),
+            patch.object(
+                paper_worker,
+                "local_artifact_statuses",
+                return_value=[
+                    ("metadata.json", "exists"),
+                    ("paper.pdf", "missing"),
+                    ("extracted.txt", "exists"),
+                    ("summary.ja.md", "missing"),
+                    ("translations/", "missing"),
+                ],
+            ),
+            patch.object(Path, "read_text", side_effect=AssertionError("show must not read private files")),
+            patch("sys.stdout", new_callable=io.StringIO) as stdout,
+        ):
+            exit_code = paper_worker.command_show(argparse.Namespace(paper_id="paper-key"))
+
+        output = stdout.getvalue()
+        self.assertEqual(exit_code, 0)
+        self.assertIn("Title: Readable Paper", output)
+        self.assertIn("Process Tags: pdf_missing", output)
+        self.assertIn("metadata.json: exists", output)
+        self.assertIn("extracted.txt: exists", output)
+        self.assertNotIn("private file body", output)
+
+
 class EnvDefaultTests(unittest.TestCase):
     def test_import_github_issues_backfills_single_number_match_url(self):
         args = argparse.Namespace(repo="owner/repo", limit=1, dry_run=False)

@@ -311,6 +311,7 @@ Implemented commands:
 | `prepare` | Prepares `Want to read` papers by creating private local files, downloading `paper.pdf` when `PDF URL` is present, extracting `extracted.txt` from an available PDF, creating a `summary.ja.md` stub without overwriting an existing summary, and supporting dry-run, keep-going, and skip-download operation for scheduled use. |
 | `collect` | Creates Notion Inbox cards from a local candidate JSON file, with dry-run support and duplicate checks by DOI, arXiv ID, Source URL, Paper Key, and Title. |
 | `retry --failed` | Retries Notion cards with `Status = Error` by reusing the same preparation flow as `prepare`; dry-run lists targets with `Process Tags`, and keep-going continues after per-card failures. |
+| `show paper-id` | Inspects one Notion paper card and reports expected local artifact presence without printing private file bodies or personal notes. |
 | `import-github-issues` | Imports GitHub Issues into Notion paper cards. |
 | `sync-github-project` | Syncs GitHub Projects status and priority into imported Notion cards. |
 
@@ -326,7 +327,6 @@ Planned commands and dependent workflow work:
 | --- | --- |
 | Full Japanese summary generation from `extracted.txt` | future issue |
 | `translate` | [#112](https://github.com/tomiokario/my-paper-reading-list/issues/112) |
-| `show paper-id` | [#115](https://github.com/tomiokario/my-paper-reading-list/issues/115) |
 | Notion Error view and schema docs | [#116](https://github.com/tomiokario/my-paper-reading-list/issues/116) |
 
 Planned items must not be documented as available CLI behavior until their tracking
