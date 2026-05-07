@@ -831,7 +831,9 @@ def load_collect_input(path: Path) -> list[dict[str, Any]]:
 
 def collect_record(raw: dict[str, Any]) -> dict[str, Any]:
     title = normalize_collect_string(raw.get("title"))
-    source_url = normalize_collect_source_url(raw.get("source_url") or raw.get("url"))
+    source_url = normalize_collect_source_url(raw.get("source_url"))
+    if not source_url:
+        source_url = normalize_collect_source_url(raw.get("url"))
     pdf_url = first_url(normalize_collect_string(raw.get("pdf_url")))
     doi = normalize_collect_doi(raw.get("doi"), source_url, pdf_url)
     arxiv = normalize_collect_arxiv_id(raw.get("arxiv_id"), source_url, pdf_url)

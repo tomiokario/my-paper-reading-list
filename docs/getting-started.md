@@ -109,7 +109,7 @@ PDF URL = <direct PDF URL if available>
 
 ## 5. Run the CLI
 
-This section lists implemented commands only. Planned commands such as `collect`, `translate`, `retry --failed`, and `show paper-id` are tracked in the README and should not be used until their issues are implemented.
+This section lists implemented commands only. Planned commands such as `translate`, `retry --failed`, and `show paper-id` are tracked in the README and should not be used until their issues are implemented.
 
 Collect candidate papers into the Notion Inbox from a local JSON file:
 

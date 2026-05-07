@@ -549,6 +549,32 @@ class CollectCommandTests(unittest.TestCase):
         self.assertIn("would collect: Second Placeholder URL [title-second-placeholder-url]", stdout.getvalue())
         self.assertIn("done: would_create=2 skipped=0", stdout.getvalue())
 
+    def test_collect_falls_back_to_url_when_source_url_is_placeholder(self):
+        args, input_patch = self.collect_args(
+            {
+                "title": "Fallback URL",
+                "source_url": "N/A",
+                "url": "https://example.test/fallback-paper",
+            }
+        )
+
+        with (
+            input_patch,
+            patch.object(
+                paper_worker,
+                "query_database",
+                return_value=[collect_page("Existing", **{"Source URL": "https://example.test/fallback-paper"})],
+            ),
+            patch.object(paper_worker, "database_property_type", return_value="select"),
+            patch.object(paper_worker, "create_page") as create_page,
+            patch("sys.stdout", new_callable=io.StringIO) as stdout,
+        ):
+            exit_code = paper_worker.command_collect(args)
+
+        self.assertEqual(exit_code, 0)
+        create_page.assert_not_called()
+        self.assertIn("skipped duplicate (Source URL): Fallback URL", stdout.getvalue())
+
     def test_collect_skips_existing_arxiv_version_duplicate(self):
         args, input_patch = self.collect_args({"title": "Duplicate Paper", "arxiv_id": "2601.00630"})
 
