@@ -274,6 +274,7 @@ Implemented commands:
 | --- | --- |
 | `status` | Shows Notion paper status counts. |
 | `prepare` | Prepares `Want to read` papers by creating private local files and downloading `paper.pdf` when `PDF URL` is present. |
+| `collect` | Creates Notion Inbox cards from a local candidate JSON file, with dry-run support and duplicate checks by DOI, arXiv ID, Source URL, Paper Key, and Title. |
 | `import-github-issues` | Imports GitHub Issues into Notion paper cards. |
 | `sync-github-project` | Syncs GitHub Projects status and priority into imported Notion cards. |
 
@@ -281,7 +282,6 @@ Planned commands and dependent workflow work:
 
 | Planned item | Tracking issue |
 | --- | --- |
-| `collect` | [#110](https://github.com/tomiokario/my-paper-reading-list/issues/110) |
 | PDF text extraction and `summary.ja.md` | [#111](https://github.com/tomiokario/my-paper-reading-list/issues/111) |
 | `translate` | [#112](https://github.com/tomiokario/my-paper-reading-list/issues/112) |
 | `retry --failed` | [#113](https://github.com/tomiokario/my-paper-reading-list/issues/113) |
