@@ -18,6 +18,7 @@
 - 原則として `main` に直接 commit / push せず、`codex/` prefix の作業ブランチを使います。
 - push 前に、秘密情報、個人パス、生成データ、private overlay が差分に混ざっていないか確認します。
 - 変更後は、変更種類に合った検証を行い、完了報告で確認結果を明記します。
+- 文字化け、エンコーディング不整合、読めない日本語テキストなどを発見した場合は、作業対象外でも無視せず GitHub Issue として記録します。今回の発見も同じ扱いにします。
 
 ## Issue 対応のマルチエージェント運用
 
@@ -45,6 +46,21 @@ Issue に対応するときは、以下の役割分担を使います。
 - 1 Codex 作業スレッド
 
 worktree は repository 内の gitignored な `tmp/worktrees/` に作ります。
+
+## 並列 PR 対応
+
+複数 Pull Request を同時に処理する場合は、`docs/technical/parallel-pr-workflow.md` に従います。
+ユーザーが「現在届いている PR を処理する」「すべての PR を merge して片付ける」と依頼した場合も同じドキュメントの「全 PR 処理ランブック」を標準手順として使います。
+
+基本方針:
+
+- open PR を mergeability、conflict、review 状態、置き換え関係で分類する。
+- PR を更新、統合、close する前に、元 Issue / 元 PR の意図と acceptance criteria を確認する。
+- conflict 解消では片方の内容を機械的に捨てず、どの意図をどこに残すかを明示する。
+- 置き換え PR では本文に `## 置き換える PR` 節を置き、置き換え元 PR を明記する。元 Issue は closing reference で閉じ、置き換え元 PR は superseded コメント付きで明示的に close する。
+- review comment へ対応した場合は、妥当性判断、修正または非対応理由、reaction、返信を thread 単位で行う。
+- PR ごとに validation、intent review、fresh pre PR review、GitHub Codex review の `+1` / no-major-issues を確認してから merge する。
+- merge 後は main 更新、worktree 削除、local / remote branch 削除を行う。全対象 PR の処理後に open PR と残 branch / worktree を再確認する。
 
 ## Validation Profiles
 
@@ -93,7 +109,11 @@ Codex review returns a positive result. A positive result means either a visible
 not find major issues.
 
 If Codex review returns actionable comments, requested changes, or major issues,
-address them before considering the PR ready. After each fix:
+first decide whether each comment is valid. For each valid comment, the
+implementer adds a `+1` reaction to that review comment and replies with the fix
+or planned fix. For each invalid or inapplicable comment, do not add `+1`; reply
+with the reason it is not being applied or with the alternate approach. Then
+address valid comments before considering the PR ready. After each fix:
 
 1. update the implementation in the issue worktree,
 2. rerun the appropriate local validation,
@@ -103,7 +123,8 @@ address them before considering the PR ready. After each fix:
 
 Do not stop at PR creation when Codex review has not completed yet. Completion
 reports must state whether GitHub Codex review reached `+1` / no-major-issues,
-or explain why that check could not be completed.
+whether review comments received `+1` / replies as appropriate, or explain why
+that check could not be completed.
 
 ## Pull Request Language
 
@@ -113,6 +134,27 @@ remaining risks, and closing issue references. Keep command names, file paths,
 environment variable names, and exact tool output snippets in their original
 literal form.
 
+## Replacement Pull Requests
+
+複数 PR の内容を統合した置き換え PR を作る場合は、置き換え元 PR を本文に明記する。
+
+本文には以下のような節を置く。GitHub の closing keyword は元 Issue を close するために使い、置き換え元 PR は superseded コメント付きで明示的に close する。
+
+```markdown
+## 置き換える PR
+
+PR #129 に内容を統合したため、以下の PR を superseded として close する。
+
+- #123
+- #124
+
+## 対応 Issue
+
+Closes #122
+```
+
+置き換え元 PR を close する場合は、統合先 PR の本文やコメントに記録を残し、置き換え元 PR へ superseded 理由をコメントして close する。
+
 ## Process Update Rule
 
 Process updates come first. If the user changes the development workflow, review sequence, storage policy, or agent rules, update the canonical operating files before applying that new workflow to the current task.
@@ -121,6 +163,8 @@ Canonical operating files:
 
 - `AGENTS.md`
 - `docs/technical/parallel-issue-workflow.md`
+- `docs/technical/parallel-pr-workflow.md`
 - `.codex/agents/*`
+- `.codex/skills/*`
 
 After those files are updated, apply the new rule to the current diff and rerun the required reviews.

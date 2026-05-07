@@ -33,7 +33,9 @@ This section is the current source of truth for issue-to-PR operation in this re
    - Continue the PR work until Codex gives a positive result: a `+1` / thumbs-up reaction, or a Codex review/comment that says it did not find major issues.
    - Do not treat PR creation alone as completion while Codex review is still pending.
 9. Address PR review comments
-   - For each actionable comment, react and reply after fixing or explaining.
+   - Decide whether each Codex review comment is valid before editing.
+   - For valid comments, the implementer adds a `+1` reaction to that review comment and replies with the fix or planned fix.
+   - For invalid or inapplicable comments, do not add `+1`; reply with the reason or alternate approach.
    - Even when addressing Codex review comments, also run the local multi-agent review for the new diff before committing/pushing.
    - After fixes are pushed, request GitHub Codex review again and repeat until the positive result is reached.
 
@@ -48,6 +50,7 @@ Completion criteria for a worker thread:
 - branch is pushed
 - PR is created or updated with validation and review evidence
 - PR title and body are written in Japanese
+- Codex review comments have been reacted to and replied to according to validity
 - GitHub Codex review has reached `+1` / no-major-issues, or the blocker to completing that check is documented
 
 # Parallel Issue Workflow
