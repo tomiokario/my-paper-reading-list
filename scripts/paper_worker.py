@@ -779,7 +779,7 @@ def normalize_collect_arxiv_id(value: Any, *fallback_values: str) -> str:
     if arxiv:
         return arxiv
     match = re.fullmatch(r"(\d{4}\.\d{4,5})(?:v\d+)?", text, flags=re.I)
-    return match.group(1) if match else text
+    return match.group(1) if match else ""
 
 
 def load_collect_input(path: Path) -> list[dict[str, Any]]:
