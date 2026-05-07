@@ -526,6 +526,29 @@ class CollectCommandTests(unittest.TestCase):
         self.assertIn("would collect: New Placeholder arXiv [title-new-placeholder-arxiv]", stdout.getvalue())
         self.assertIn("done: would_create=1 skipped=0", stdout.getvalue())
 
+    def test_collect_ignores_placeholder_source_url_for_duplicate_key(self):
+        args, input_patch = self.collect_args(
+            [
+                {"title": "First Placeholder URL", "source_url": "N/A"},
+                {"title": "Second Placeholder URL", "source_url": "unknown"},
+            ]
+        )
+
+        with (
+            input_patch,
+            patch.object(paper_worker, "query_database", return_value=[]),
+            patch.object(paper_worker, "database_property_type", return_value="select"),
+            patch.object(paper_worker, "create_page") as create_page,
+            patch("sys.stdout", new_callable=io.StringIO) as stdout,
+        ):
+            exit_code = paper_worker.command_collect(args)
+
+        self.assertEqual(exit_code, 0)
+        create_page.assert_not_called()
+        self.assertIn("would collect: First Placeholder URL [title-first-placeholder-url]", stdout.getvalue())
+        self.assertIn("would collect: Second Placeholder URL [title-second-placeholder-url]", stdout.getvalue())
+        self.assertIn("done: would_create=2 skipped=0", stdout.getvalue())
+
     def test_collect_skips_existing_arxiv_version_duplicate(self):
         args, input_patch = self.collect_args({"title": "Duplicate Paper", "arxiv_id": "2601.00630"})
 

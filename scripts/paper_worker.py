@@ -627,7 +627,7 @@ def parse_issue_body(body: str) -> dict[str, Any]:
 
 
 def first_url(value: str) -> str:
-    match = re.search(r"https?://\S+", value or "")
+    match = re.search(r"https?://\S+", value or "", flags=re.I)
     if not match:
         return ""
     url = match.group(0)
@@ -786,8 +786,8 @@ def normalize_url_scheme_and_host(value: str) -> str:
 
 def normalize_collect_source_url(value: Any) -> str:
     raw_text = normalize_collect_string(value)
-    text = first_url(raw_text) or raw_text
-    return normalize_url_scheme_and_host(text)
+    text = first_url(raw_text)
+    return normalize_url_scheme_and_host(text) if text else ""
 
 
 def normalize_collect_doi(value: Any, *fallback_values: str) -> str:
