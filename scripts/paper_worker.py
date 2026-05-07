@@ -865,7 +865,12 @@ def collect_paper_key(record: dict[str, Any]) -> str:
         source_url_key = normalize_source_url_duplicate_value(record["source_url"])
         url_hash = hashlib.sha1(source_url_key.encode("utf-8")).hexdigest()[:8]
         return f"url-{slugify(source_url_key)}-{url_hash}"
-    return "title-" + slugify(record["title"])
+    title = record["title"]
+    title_slug = slugify(title)
+    if title_slug == "paper" and normalize_collect_string(title).lower() != "paper":
+        title_hash = hashlib.sha1(title.encode("utf-8")).hexdigest()[:8]
+        return f"title-{title_slug}-{title_hash}"
+    return "title-" + title_slug
 
 
 def collect_record_to_properties(record: dict[str, Any]) -> dict[str, Any]:

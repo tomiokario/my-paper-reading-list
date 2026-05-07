@@ -652,6 +652,29 @@ class CollectCommandTests(unittest.TestCase):
         create_page.assert_not_called()
         self.assertIn("skipped duplicate (DOI): Duplicate DOI PDF URL", stdout.getvalue())
 
+    def test_collect_uses_hash_for_non_ascii_title_only_paper_key(self):
+        args, input_patch = self.collect_args(
+            [
+                {"title": "日本語だけの候補"},
+                {"title": "別の日本語候補"},
+            ]
+        )
+
+        with (
+            input_patch,
+            patch.object(paper_worker, "query_database", return_value=[]),
+            patch.object(paper_worker, "database_property_type", return_value="select"),
+            patch.object(paper_worker, "create_page") as create_page,
+            patch("sys.stdout", new_callable=io.StringIO) as stdout,
+        ):
+            exit_code = paper_worker.command_collect(args)
+
+        self.assertEqual(exit_code, 0)
+        create_page.assert_not_called()
+        self.assertIn("would collect: 日本語だけの候補 [title-paper-", stdout.getvalue())
+        self.assertIn("would collect: 別の日本語候補 [title-paper-", stdout.getvalue())
+        self.assertIn("done: would_create=2 skipped=0", stdout.getvalue())
+
     def test_collect_skips_existing_title_duplicate(self):
         args, input_patch = self.collect_args({"title": "Known Paper"})
 
