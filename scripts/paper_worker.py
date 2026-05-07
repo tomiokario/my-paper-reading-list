@@ -769,6 +769,27 @@ def validate_select_option_name(value: str, field_name: str) -> None:
         raise PaperWorkerError(f"{field_name} must not contain commas: {value}")
 
 
+def normalize_url_scheme_and_host(value: str) -> str:
+    parsed = urllib.parse.urlsplit(value)
+    if not parsed.scheme or not parsed.netloc:
+        return value
+    return urllib.parse.urlunsplit(
+        (
+            parsed.scheme.lower(),
+            parsed.netloc.lower(),
+            parsed.path,
+            parsed.query,
+            parsed.fragment,
+        )
+    )
+
+
+def normalize_collect_source_url(value: Any) -> str:
+    raw_text = normalize_collect_string(value)
+    text = first_url(raw_text) or raw_text
+    return normalize_url_scheme_and_host(text)
+
+
 def normalize_collect_doi(value: Any, *fallback_values: str) -> str:
     return extract_doi(normalize_collect_string(value), *fallback_values)
 
@@ -810,7 +831,7 @@ def load_collect_input(path: Path) -> list[dict[str, Any]]:
 
 def collect_record(raw: dict[str, Any]) -> dict[str, Any]:
     title = normalize_collect_string(raw.get("title"))
-    source_url = first_url(normalize_collect_string(raw.get("source_url") or raw.get("url")))
+    source_url = normalize_collect_source_url(raw.get("source_url") or raw.get("url"))
     pdf_url = first_url(normalize_collect_string(raw.get("pdf_url")))
     doi = normalize_collect_doi(raw.get("doi"), source_url, pdf_url)
     arxiv = normalize_collect_arxiv_id(raw.get("arxiv_id"), source_url, pdf_url)
@@ -841,8 +862,9 @@ def collect_paper_key(record: dict[str, Any]) -> str:
     if record.get("arxiv_id"):
         return "arxiv-" + slugify(record["arxiv_id"])
     if record.get("source_url"):
-        url_hash = hashlib.sha1(record["source_url"].encode("utf-8")).hexdigest()[:8]
-        return f"url-{slugify(record['source_url'])}-{url_hash}"
+        source_url_key = normalize_source_url_duplicate_value(record["source_url"])
+        url_hash = hashlib.sha1(source_url_key.encode("utf-8")).hexdigest()[:8]
+        return f"url-{slugify(source_url_key)}-{url_hash}"
     return "title-" + slugify(record["title"])
 
 
@@ -889,6 +911,11 @@ def normalize_duplicate_value(value: str, *, case_sensitive: bool = False) -> st
     return normalized if case_sensitive else normalized.lower()
 
 
+def normalize_source_url_duplicate_value(value: str) -> str:
+    normalized = normalize_duplicate_value(value, case_sensitive=True)
+    return normalize_url_scheme_and_host(normalized)
+
+
 def collect_duplicate_keys(record: dict[str, Any]) -> list[tuple[str, str]]:
     candidates = [
         ("DOI", record.get("doi", "")),
@@ -899,14 +926,17 @@ def collect_duplicate_keys(record: dict[str, Any]) -> list[tuple[str, str]]:
     ]
     keys: list[tuple[str, str]] = []
     for label, value in candidates:
-        normalized = normalize_duplicate_value(value, case_sensitive=label == "Source URL")
+        if label == "Source URL":
+            normalized = normalize_source_url_duplicate_value(value)
+        else:
+            normalized = normalize_duplicate_value(value)
         if normalized:
             keys.append((label, f"{label}:{normalized}"))
     return keys
 
 
 def collect_page_duplicate_keys(page: dict[str, Any]) -> list[tuple[str, str]]:
-    source_url = get_text(page, "Source URL")
+    source_url = normalize_collect_source_url(get_text(page, "Source URL"))
     pdf_url = get_text(page, "PDF URL")
     record = {
         "doi": normalize_collect_doi(get_text(page, "DOI"), source_url, pdf_url),

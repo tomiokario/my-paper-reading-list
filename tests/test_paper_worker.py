@@ -569,6 +569,26 @@ class CollectCommandTests(unittest.TestCase):
         self.assertIn("would collect: Lower Path [url-example.test-paper-", stdout.getvalue())
         self.assertIn("done: would_create=2 skipped=0", stdout.getvalue())
 
+    def test_collect_normalizes_source_url_scheme_and_host_case_for_duplicate_key(self):
+        args, input_patch = self.collect_args({"title": "Duplicate Host Case", "source_url": "https://example.test/paper"})
+
+        with (
+            input_patch,
+            patch.object(
+                paper_worker,
+                "query_database",
+                return_value=[collect_page("Existing", **{"Source URL": "HTTPS://EXAMPLE.TEST/paper"})],
+            ),
+            patch.object(paper_worker, "database_property_type", return_value="select"),
+            patch.object(paper_worker, "create_page") as create_page,
+            patch("sys.stdout", new_callable=io.StringIO) as stdout,
+        ):
+            exit_code = paper_worker.command_collect(args)
+
+        self.assertEqual(exit_code, 0)
+        create_page.assert_not_called()
+        self.assertIn("skipped duplicate (Source URL): Duplicate Host Case", stdout.getvalue())
+
     def test_collect_uses_existing_pdf_url_for_arxiv_duplicate(self):
         args, input_patch = self.collect_args({"title": "Duplicate PDF URL", "arxiv_id": "2601.00630"})
 
